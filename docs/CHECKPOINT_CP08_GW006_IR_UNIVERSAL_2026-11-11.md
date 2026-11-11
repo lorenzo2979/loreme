@@ -39,3 +39,16 @@ Date: 2026-11-11 (Europe/Rome)
 - Native IR pinmux and physical TX/RX trace audit; module PA18/PA19 are UART, not confirmed native IR. PB23 button conflicts with vendor IR TX example.
 - Full SDK firmware image boot layout, backup and safe recovery procedure validated on actual WBRG1/GW006 hardware.
 - **DO NOT FLASH**. Original GW006 retains OpenBeken 1.18.321.
+
+
+## Additional confirmed network settings: Search WiFi and DHCP/static IP
+Confirmed by user on 2026-11-11, after CP-08 initial creation. Mandatory for upcoming APConfig page and Android Config UI:
+- Include a visible **"Cerca Wi-Fi / Search WiFi"** action. It scans nearby Wi-Fi networks, lists SSID, signal and security type, and fills the selected SSID; support manual SSID for hidden networks and a refresh button. Check radio scan/AP concurrency on real hardware.
+- **IP configuration selector: DHCP (default) or Static IP** for the normal GW006 station/network, NOT for the temporary setup AP (which should remain 192.168.4.1).
+- DHCP auto-obtains IP address, subnet mask, gateway and DNS via router; static mode reveals required IPv4 address, mask, gateway, primary DNS and optional secondary DNS.
+- Validate IPv4/mask/gateway/DNS and reject malformed entries, overlapping or unsafe settings before attempting network changes; do not overwrite known-good STA configuration unless connectivity is verified.
+- Persist Wi-Fi network choice and DHCP/static mode together transactionally; revert to previous working config on a failed network switch. Retain existing credentials and network settings if APConfig times out or is closed.
+- Keep the chosen connection mode visible in the Android Config page and accessible from the 5-minute open APConfig session; do not expose stored Wi-Fi passwords for reading.
+- Open APConfig remains button-triggered (5 sec) with 5-minute timeout, no login/WPA password, used exclusively for setup; normal GWIR TCP port stays 42424 with HMAC authentication.
+- **Status:** requirements recorded only. Search UI, scan backend, static-IP apply and real AP HTTP portal are not yet verified/implemented on the physical GW006; no flash.
+See docs/REV17_WIFI_SCAN_DHCP_STATIC_REQUIREMENTS.md.
