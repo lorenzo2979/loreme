@@ -52,3 +52,11 @@ Confirmed by user on 2026-11-11, after CP-08 initial creation. Mandatory for upc
 - Open APConfig remains button-triggered (5 sec) with 5-minute timeout, no login/WPA password, used exclusively for setup; normal GWIR TCP port stays 42424 with HMAC authentication.
 - **Status:** requirements recorded only. Search UI, scan backend, static-IP apply and real AP HTTP portal are not yet verified/implemented on the physical GW006; no flash.
 See docs/REV17_WIFI_SCAN_DHCP_STATIC_REQUIREMENTS.md.
+
+## Requisito confermato: MQTT esclusivamente per Home Assistant
+- MQTT è una integrazione opzionale dedicata **solo a Home Assistant**; niente EMQX Cloud o altri broker cloud obbligatori.
+- Per Home Assistant si configura il broker MQTT locale (es. Mosquitto integrato nel sistema HA), host/IP, porta, username e password, senza credenziali hardcoded.
+- Dashboard web autonoma GW006 e app Android opzionale continuano a usare direttamente la connessione LAN, **senza dipendenza da MQTT o da Home Assistant**.
+- Se Home Assistant/MQTT non sono configurati o disponibili, acquisizione, memoria e trasmissione IR locali devono continuare a funzionare.
+- MQTT deve essere disattivabile e idealmente disattivato per impostazione iniziale; collegamento e discovery/entità di Home Assistant da implementare e verificare, non attivi oggi.
+- Il servizio TCP IR resta sulla porta 42424, separato da MQTT; APConfig resta temporaneo e soltanto per la configurazione.
