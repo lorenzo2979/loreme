@@ -1,0 +1,8 @@
+GW006 REV15 OPEN APConfig / 11 November 2026
+User requirement: OPEN Wi-Fi APConfig, NO password, NO portal login and NO access token.
+Press PCB button for 5 seconds; stop after 5 minutes or successful configuration; retain existing STA credentials.
+SDK adapter: wifi_start_ap(ssid, RTW_SECURITY_OPEN, NULL, ssid_len, 0, channel).
+Normal GWAS IR command HMAC is separate and unchanged; production Wi-Fi router can still have its own password.
+Local tests: make test, test-sdk-integration (21 mock objects), arm-smoke PASS.
+Board GPIO PB23 remains disabled; real captive-portal server, DHCP, persistent provisioning and backup/recovery NOT IMPLEMENTED.
+No flash; OpenBeken 1.18.321 unchanged.

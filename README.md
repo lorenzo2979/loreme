@@ -1,3 +1,13 @@
+# GW006 IR Universal — REV15 APConfig OPEN (source draft)
+
+## Open APConfig specification (user confirmed)
+
+- Button held 5 seconds -> OPEN Wi-Fi APConfig. **No AP password, no captive-portal login or access token.**
+- AP closes after 5 minutes or successful saving. Existing STA credentials preserved.
+- Wi-Fi adapter uses `RTW_SECURITY_OPEN`, `NULL` password, length `0`.
+- Regular IR network HMAC authentication is a separate feature and is unchanged.
+- **Not functional on GW006 yet:** DHCP, HTTP provisioning service, physical PB23 approval, and board recovery not implemented. Do not flash.
+
 # GW006 IR Universal Native V2.0 — REV11 half-duplex controller and SDK integration
 
 **Date:** 11 Nov 2026. Portable C engine + Kotlin Android core, **not a flashable Realtek firmware nor an APK**.

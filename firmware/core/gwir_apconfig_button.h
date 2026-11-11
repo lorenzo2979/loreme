@@ -9,8 +9,8 @@
 
 typedef struct {
     void *ctx;
-    /* Return 0 only after securely starting a WPA2+ AP with device-unique
-       non-hardcoded credentials and a bounded local provisioning service. */
+    /* Return 0 only after starting the OPEN APConfig network and a bounded
+       AP-only provisioning service. No password or login is required. */
     int (*ap_start)(void *ctx);
     /* Return 0 only after AP and its provisioning listeners are stopped. */
     int (*ap_stop)(void *ctx);
