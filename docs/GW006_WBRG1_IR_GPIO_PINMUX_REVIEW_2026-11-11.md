@@ -70,3 +70,10 @@ No firmware image flashing, no live pinmux writes authorized by this document.
 - New proposed **native IR pin pairing** for this specific user's board: **TX = PB31**, **RX = PA26**. This pairing allows red LED on PA25, blue LED on PB22 and APConfig button on PB23 to remain untouched.
 - **Important pending validation**: Realtek AN0400 documents PB31=IR_TX, but the SDK's commented sample reverses PB29/PB31 labels; confirm on native SDK/hardware which PinMux is actually driven by IR TX before enabling it. Verify user-tested GPIO's actual board net/voltage, driver stage and receiver polarity with controlled bench testing.
 - User measurements are not yet a demonstrated 38-kHz carrier or successful IR receive. **Do not flash or activate pinmux** until full firmware/board recovery gate is satisfied. Existing OpenBeken remains installed.
+
+## Final user hardware pin selection (2026-11-11)
+- User explicitly selects **PB31 (WBRG1 module contact 20, AOUTP_L) for native IR TX**, accepting that soldering may need to be directly on the WBRG1 module's external castellated pad.
+- **PA26 (REQ, WBRG1 module contact 11)** remains the chosen native IR RX, user-tested free; P2 upper pad is user-reported continuity location, but be aware P2 silk is marked RX1 and independent net-to-pin mapping must be reconciled before relying on that pad.
+- Do not solder to an **internal bare RTL8721CSM silicon IC leg**; prefer the external WBRG1 module pad, or a verified same-net test point. Protect adjacent pads/antenna; use a strain-relieved fine insulated signal wire at 3.3 V logic level, not directly an IR LED load.
+- Preserve PA25 red LED, PB22 blue LED, PB23 physical APConfig button.
+- PB31=IR_TX selection still needs actual native PinMux/waveform confirmation because commented SDK examples conflict with Realtek reference table. No on-board flash until full firmware image, hardware driver and recovery have been verified.
