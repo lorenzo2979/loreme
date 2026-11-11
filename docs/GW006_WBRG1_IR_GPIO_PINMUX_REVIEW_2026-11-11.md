@@ -42,3 +42,9 @@ No firmware image flashing, no live pinmux writes authorized by this document.
 - This is a **user-performed electrical check**, not an independent lab measurement. Treat it as a verified-by-user candidate for **IR hardware RX**; final RX receiver wiring, power, signal polarity, IRQ and IR timing remain untested.
 - Preserve P2 orientation with a future photo before soldering; no firmware flash or live pinmux change is authorized by this result.
 - **Next pin to verify: PA25** for hardware IR TX. A matching GW006 board report associates it with the red LED, so determine its actual circuit/occupancy before choosing a modification.
+
+## User multimeter finding — PA25 reaches red LED positive pad (2026-11-11)
+- User located **PA25** and reports a connection to the **positive/anode pad of the red LED** on their GW006 PCB. This confirms the red LED circuit is associated with the proposed IR TX GPIO; it is **not free as currently routed**.
+- This is a reported board measurement. It does **not yet establish** whether PA25-to-LED positive is a direct ~0 ohm copper connection or a path through a current-limit resistor/other components; verify resistance with power completely removed.
+- **DO NOT** connect IR TX electronics to PA25 yet, set IR PinMux, flash, or assume removing the LED alone electrically isolates its circuit. Check the series resistor and whether the net also ties to 3.3 V or another circuit before choosing an isolation point.
+- Suggested next measurement: board unpowered, ohms from WBRG1 PA25 contact to LED positive and negative pads, and both sides of nearby LED series resistor; record readings. PA26 was independently user-tested free at P2 upper pad for IR RX.
