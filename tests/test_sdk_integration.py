@@ -21,6 +21,8 @@ typedef struct { uint32_t IR_Mode, IR_Freq, IR_DutyCycle, IR_RxFIFOThrLevel, IR_
 #define IR_MODE_RX (1u<<31)
 #define IR_RX_COUNT_LOW_LEVEL 0u
 #define portTICK_PERIOD_MS 1u
+#define _PB_23 0x37u
+u32 GPIO_ReadDataBit(u32 pin);
 u32 xTaskGetTickCount(void);
 #define IR_DEV ((IR_TypeDef*)0)
 #define IR_MODE_TX 0u
@@ -117,7 +119,7 @@ with tempfile.TemporaryDirectory(prefix='gw006_sdk_mock_') as td:
     env=os.environ.copy(); env['MAKE_INCLUDE_GEN']=str(inc); env['SRCDIR']=str(main.parent)
     make=subprocess.run(['make','-C',str(main.parent),'all'],env=env,capture_output=True,text=True)
     assert make.returncode==0,make.stdout+'\n'+make.stderr
-    assert len(list(main.parent.glob('*.o')))==17,'One of 17 SDK objects was not compiled'
+    assert len(list(main.parent.glob('*.o')))==19,'One of 19 SDK objects was not compiled'
     remove=call(TOOL,root,'--remove');assert remove.returncode==0,remove.stderr
     if originals!=(main.read_bytes(),mf.read_bytes()):
         print('Expected:',[repr(x) for x in originals]);print('Actual:',[repr(x) for x in (main.read_bytes(),mf.read_bytes())]);raise AssertionError('Removal did not restore original source')
@@ -128,4 +130,4 @@ with tempfile.TemporaryDirectory(prefix='gw006_sdk_mock_') as td:
     before=(main.read_bytes(),mf.read_bytes())
     conflict=call(TOOL,root,'--apply');assert conflict.returncode!=0
     assert before==(main.read_bytes(),mf.read_bytes()), 'Collision corrupted SDK project'
-    print('PASS: dry-run, apply, idempotence, 17 mocked-SDK objects, rollback, collision refusal')
+    print('PASS: dry-run, apply, idempotence, 19 mocked-SDK objects, rollback, collision refusal')

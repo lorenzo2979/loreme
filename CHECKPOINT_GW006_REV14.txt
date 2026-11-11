@@ -1,0 +1,1 @@
+GW006 IR Universal REV14 — button APConfig FSM. Debounce 50ms; hold 5s; APConfig window 5min; no saved Wi-Fi credential deletion. PCB PB23 candidate reserved from IR TX but not physically confirmed. Vendor GPIO/AP are fail-closed; no GPIO pinmux init or AP, no board flash. Tests and SDK-native build to be recorded separately. OpenBeken 1.18.321 preserved.

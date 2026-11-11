@@ -5,7 +5,7 @@ INCLUDE = -Ifirmware/core
 
 .PHONY: test clean arm-smoke
 
-test: build/test_engine build/test_stream build/test_amebad_tx_codec build/test_amebad_tx_fifo build/test_amebad_rx_fifo build/test_amebad_rx_irq build/test_amebad_bus build/test_auth build/test_auth_dispatch build/test_sdk_hmac build/mock_tcp_server
+test: build/test_engine build/test_stream build/test_amebad_tx_codec build/test_amebad_tx_fifo build/test_amebad_rx_fifo build/test_amebad_rx_irq build/test_amebad_bus build/test_auth build/test_auth_dispatch build/test_sdk_hmac build/test_apconfig_button build/mock_tcp_server
 	./build/test_engine
 	./build/test_stream
 	./build/test_amebad_tx_codec
@@ -16,6 +16,7 @@ test: build/test_engine build/test_stream build/test_amebad_tx_codec build/test_
 	./build/test_auth >/dev/null
 	./build/test_auth_dispatch
 	./build/test_sdk_hmac
+	./build/test_apconfig_button
 	python3 tests/test_tcp_loopback.py
 
 build/test_engine: tests/test_engine.c $(CORE) firmware/core/gwir_protocol.h firmware/core/gwir_engine.h firmware/core/gwir_capture_builder.h
@@ -82,3 +83,7 @@ build/test_auth_dispatch: tests/test_auth_dispatch.c firmware/core/gwir_auth_dis
 build/test_sdk_hmac: tests/test_sdk_hmac.c tests/mock_mbedtls_md.c firmware/sdk/gwir_sdk_hmac.c firmware/core/gwir_auth.c firmware/core/gwir_protocol.c
 	@mkdir -p build
 	$(CC) $(CFLAGS) -Ifirmware/sdk $(INCLUDE) -Itests/stubs firmware/sdk/gwir_sdk_hmac.c firmware/core/gwir_auth.c firmware/core/gwir_protocol.c tests/mock_mbedtls_md.c tests/test_sdk_hmac.c -lcrypto -o $@
+
+build/test_apconfig_button: tests/test_apconfig_button.c firmware/core/gwir_apconfig_button.c firmware/core/gwir_apconfig_button.h
+	@mkdir -p build
+	$(CC) $(CFLAGS) $(INCLUDE) firmware/core/gwir_apconfig_button.c tests/test_apconfig_button.c -o $@

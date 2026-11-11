@@ -23,13 +23,13 @@ BEGIN_C = "/* >>> GWIR_REV9_START (owned by integrator) */"
 END_C = "/* <<< GWIR_REV9_END */"
 
 GROUPS = {
-    "core": ["gwir_protocol.c", "gwir_engine.c", "gwir_capture_builder.c", "gwir_stream.c", "gwir_auth.c", "gwir_auth_dispatch.c"],
+    "core": ["gwir_protocol.c", "gwir_engine.c", "gwir_capture_builder.c", "gwir_stream.c", "gwir_auth.c", "gwir_auth_dispatch.c", "gwir_apconfig_button.c"],
     "realtek": [
         "gwir_amebad_tx_codec.c", "gwir_amebad_tx_fifo.c", "gwir_amebad_tx_vendor.c",
         "gwir_amebad_rx_fifo.c", "gwir_amebad_rx_vendor.c", "gwir_amebad_rx_irq.c",
         "gwir_amebad_bus.c", "gwir_amebad_vendor_bus.c",
     ],
-    "sdk": ["gwir_sdk_diag.c", "gwir_sdk_hmac.c"],
+    "sdk": ["gwir_sdk_diag.c", "gwir_sdk_hmac.c", "gwir_sdk_apconfig_port.c"],
 }
 
 

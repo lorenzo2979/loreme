@@ -1,13 +1,6 @@
-# GW006 IR Universal Native V2.0 — REV13 Mbed TLS HMAC adapter (SDK only)
+# GW006 IR Universal Native V2.0 — REV11 half-duplex controller and SDK integration
 
 **Date:** 11 Nov 2026. Portable C engine + Kotlin Android core, **not a flashable Realtek firmware nor an APK**.
-
-## New in REV13
-
-- Added actual AmebaD SDK **Mbed TLS SHA-256 HMAC provider** for the existing GWAS v1 signed protocol (`firmware/sdk/gwir_sdk_hmac.[ch]`).
-- Tested adapter with OpenSSL-backed test shim and fail-closed behavior; mock SDK integration now builds 17 C objects.
-- No hardcoded secrets; no pairing, persistent keys, secure boot nonce, Wi-Fi service or physical IR. **Not flashable.**
-- Official Realtek KM0/KM4 build to be checked in GitHub Actions; see `docs/REV13_MBEDTLS_BACKEND.md`.
 
 ## New in REV12
 
@@ -84,7 +77,7 @@
 - Proposed AP 192.168.4.1 is **not implemented**.
 - Existing SDK example/probe workflows are for remote auditing; **they have not run in this conversation**, and no exact SDK directory is available locally.
 - `android/core` is portable Kotlin/JVM, **not** a complete Android Studio app and not an APK. `context.filesDir` is the intended Android storage location (requires app integration and tests on actual Android; uses java.nio.file, API 26+).
-- **Security is incomplete:** GWAS HMAC authentication code exists, but pairing/key provisioning/secure nonce and WLAN transport are absent. No LAN/AP exposure, no flash, no automatic TX retries. Device reset still loses unacknowledged RAM captures.
+- **Security is still absent:** CRC is not authentication. No LAN/AP exposure, no flash, no automatic TX retries. Device reset still loses unacknowledged RAM captures.
 
 ## Source directories
 
@@ -98,4 +91,4 @@
 
 ## Immediate next engineering milestone
 
-REV12 KM0/KM4 SDK builds have passed; validate the REV13 Mbed TLS cryptographic linkage in a fresh SDK build. Pairing, Wi-Fi and board hardware remain unimplemented. **Do not represent native SDK builds as a tested GW006 device image.**
+Acquire and audit the exact Realtek `ameba-rtos-d` SDK build tree in a remote environment, confirm actual IR API symbol locations, pinmux and FreeRTOS integration, and implement a native HAL and secured LAN transport. **Do not represent host tests as a tested GW006 image.**
