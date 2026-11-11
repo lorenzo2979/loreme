@@ -28,3 +28,11 @@ General GPIOs can usually be configured as input/output in software; the **nativ
 4. Confirm receiver supply/signal inversion and IR LED transistor driver, and test transmit carrier/receive timing with external measurement.
 5. Validate backup/recovery and native pinmux only after hardware evidence.
 No firmware image flashing, no live pinmux writes authorized by this document.
+
+## Critical board-level discovery: PA25 is probably already wired (2026-11-11)
+- **Do NOT treat PA25 as a free pin.** An owner of the same RSH-GW006 gateway, in the OpenBeken conversion thread, documents: `PA25 = red LED`, `PB22 = blue WiFi LED`, `PB23 = PCB button`. The original board's OpenBeken configuration in the thread maps `"25": "LED;1"`, `"54": "WifiLED;0"`, `"55": "Btn_n;0"`. See: https://www.elektroda.com/rtvforum/topic4127578.html (post #1 and #12, 24–26 June 2025).
+- PA25 therefore is **not presumed available for native IR TX**, even if IR TX mux supports it. Using it without isolating the LED circuit may load or interfere with the 38-kHz carrier. Merely disabling a LED in software does not make the PCB electrical connection disappear.
+- WBRG1 `PA26` is labeled `REQ` / `PTA_REQ` in Tuya's datasheet and **may** have a routed board trace or Zigbee-radio-coexistence circuit. Its actual occupation on this particular board is **unknown**. A removed ZS3L module does not prove its former nets are isolated or free.
+- Prior advice identifying PA25/PA26 as "preferred" must be interpreted as *peripheral-mux candidates*, not *confirmed vacant GPIOs*. Both require hardware verification before any soldering, IR pinmux write or flashing.
+- Test with GW006 totally **unpowered**: identify module PA25 and REQ/PA26 solder contacts using the **module pad** diagram (the Tuya datasheet's chip Pin 40/39 are IC pin numbers, not WBRG1 castellated contact numbers); check continuity from each to the red-LED resistor, former ZS3L interface pads, and headers; inspect both PCB sides. If the red LED is connected to PA25, consider isolation only after a board-specific review and backup plan, not just GPIO configuration.
+- Current status: not verified electrically on the user's PCB; retain OpenBeken 1.18.321 and do not flash.
