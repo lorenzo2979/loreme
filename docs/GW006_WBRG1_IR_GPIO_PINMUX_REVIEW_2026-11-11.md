@@ -77,3 +77,10 @@ No firmware image flashing, no live pinmux writes authorized by this document.
 - Do not solder to an **internal bare RTL8721CSM silicon IC leg**; prefer the external WBRG1 module pad, or a verified same-net test point. Protect adjacent pads/antenna; use a strain-relieved fine insulated signal wire at 3.3 V logic level, not directly an IR LED load.
 - Preserve PA25 red LED, PB22 blue LED, PB23 physical APConfig button.
 - PB31=IR_TX selection still needs actual native PinMux/waveform confirmation because commented SDK examples conflict with Realtek reference table. No on-board flash until full firmware image, hardware driver and recovery have been verified.
+
+## User-confirmed LED assignments (2026-11-11)
+- **Blue LED = Wi-Fi connection status**, existing GW006 GPIO **PB22**. Suggested behavior: blinking while connecting, steadily on while STA is connected, off when disconnected (subject to actual board polarity).
+- **Red LED = temporary APConfig indicator**, existing GW006 GPIO **PA25**. On only while the open APConfig session is truly active; off as soon as it closes on saved provisioning or after 5-minute timeout; if AP start fails, must not falsely indicate active.
+- **PCB button PB23** continues to start APConfig after five-second hold. IR TX PB31 and IR RX PA26 do not use these LED pins.
+- Prior OpenBeken matching-board settings suggest PA25 `LED;1` (likely active high) and PB22 `WifiLED;0` (likely active low); treat polarity as candidate and verify on this hardware before driving pins. Do not enable GPIO outputs until the firmware's board hardware gate is validated.
+- Distinguish STA Wi-Fi status from APConfig state; both indicators may be on together when STA+AP is active. This is a requirement, **not** a hardware-test claim.

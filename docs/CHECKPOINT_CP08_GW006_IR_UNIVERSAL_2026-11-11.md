@@ -60,3 +60,10 @@ See docs/REV17_WIFI_SCAN_DHCP_STATIC_REQUIREMENTS.md.
 - Se Home Assistant/MQTT non sono configurati o disponibili, acquisizione, memoria e trasmissione IR locali devono continuare a funzionare.
 - MQTT deve essere disattivabile e idealmente disattivato per impostazione iniziale; collegamento e discovery/entità di Home Assistant da implementare e verificare, non attivi oggi.
 - Il servizio TCP IR resta sulla porta 42424, separato da MQTT; APConfig resta temporaneo e soltanto per la configurazione.
+
+## User-confirmed LED assignments (2026-11-11)
+- **Blue LED = Wi-Fi connection status**, existing GW006 GPIO **PB22**. Suggested behavior: blinking while connecting, steadily on while STA is connected, off when disconnected (subject to actual board polarity).
+- **Red LED = temporary APConfig indicator**, existing GW006 GPIO **PA25**. On only while the open APConfig session is truly active; off as soon as it closes on saved provisioning or after 5-minute timeout; if AP start fails, must not falsely indicate active.
+- **PCB button PB23** continues to start APConfig after five-second hold. IR TX PB31 and IR RX PA26 do not use these LED pins.
+- Prior OpenBeken matching-board settings suggest PA25 `LED;1` (likely active high) and PB22 `WifiLED;0` (likely active low); treat polarity as candidate and verify on this hardware before driving pins. Do not enable GPIO outputs until the firmware's board hardware gate is validated.
+- Distinguish STA Wi-Fi status from APConfig state; both indicators may be on together when STA+AP is active. This is a requirement, **not** a hardware-test claim.
