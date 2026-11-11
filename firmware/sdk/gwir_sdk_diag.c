@@ -5,7 +5,9 @@
 #include "../core/gwir_auth.h"
 #include "gwir_sdk_hmac.h"
 #include "gwir_sdk_apconfig_port.h"
+#include "gwir_sdk_apconfig_wifi.h"
 #include "../core/gwir_apconfig_button.h"
+#include "../core/gwir_apconfig_provision.h"
 #include "../core/gwir_auth_dispatch.h"
 #include "../realtek/gwir_amebad_tx_codec.h"
 #include "../realtek/gwir_amebad_tx_fifo.h"
@@ -48,9 +50,11 @@ void gwir_sdk_integration_banner(void)
     ok = ok && (gwir_apconfig_init(NULL, (gwir_apconfig_ops){0}) == -1);
     ok = ok && (gwir_sdk_button_read_pb23(NULL) == -1);
     ok = ok && (gwir_sdk_apconfig_start(NULL) == -1);
+    ok = ok && (gwir_sdk_ap_wifi_enter(NULL, NULL) == -1);
+    ok = ok && (gwir_provision_parse_form(NULL, 0u, NULL) == -1);
     /* Verify fail-closed physical-board gate, no IR register access. */
     ok = ok && native_bus_ops.board_ir_ready(native_bus_ops.ctx) == 0;
-    DBG_8195A("[GWIR REV14] SDK link probe %s; e=%u,rxq=%u; IR/WiFi disabled\n",
+    DBG_8195A("[GWIR REV16] SDK link probe %s; e=%u,rxq=%u; IR/WiFi disabled\n",
               ok ? "OK" : "FAIL", (unsigned int)sizeof(gwir_engine),
               (unsigned int)sizeof(gwir_amebad_rx_queue));
 }

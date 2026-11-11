@@ -24,5 +24,6 @@ for spec in 'cortex-m23 arm-km0-m23' 'cortex-m33 arm-km4-m33'; do
       -c firmware/core/gwir_apconfig_button.c \
       -o "build/$target/gwir_apconfig_button.o"
     "$CLANG" --target=arm-none-eabi -mcpu="$cpu" -mthumb -mfloat-abi=soft -ffreestanding -fno-builtin -O2 -std=c11 -Wall -Wextra -Werror -c firmware/core/gwir_apconfig_session.c -o "build/$target/gwir_apconfig_session.o"
+    "$CLANG" --target=arm-none-eabi -mcpu="$cpu" -mthumb -mfloat-abi=soft -ffreestanding -fno-builtin -O2 -std=c11 -Wall -Wextra -Werror -c firmware/core/gwir_apconfig_provision.c -o "build/$target/gwir_apconfig_provision.o"
     echo "PASS compile-only $cpu with test stub (NOT linked/SDK-tested)"
 done
