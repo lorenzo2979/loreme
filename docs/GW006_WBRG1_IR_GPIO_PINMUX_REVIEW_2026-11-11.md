@@ -48,3 +48,10 @@ No firmware image flashing, no live pinmux writes authorized by this document.
 - This is a reported board measurement. It does **not yet establish** whether PA25-to-LED positive is a direct ~0 ohm copper connection or a path through a current-limit resistor/other components; verify resistance with power completely removed.
 - **DO NOT** connect IR TX electronics to PA25 yet, set IR PinMux, flash, or assume removing the LED alone electrically isolates its circuit. Check the series resistor and whether the net also ties to 3.3 V or another circuit before choosing an isolation point.
 - Suggested next measurement: board unpowered, ohms from WBRG1 PA25 contact to LED positive and negative pads, and both sides of nearby LED series resistor; record readings. PA26 was independently user-tested free at P2 upper pad for IR RX.
+
+## User confirmation: PA25 has DIRECT continuity to red LED positive pad
+- User confirmed that continuity between WBRG1 **PA25** and the **red LED anode (+)** is **direct**, with no series resistor between the two measured points.
+- This establishes that PA25 is already electrically connected to an LED pad, not available as-is for dedicated IR TX.
+- Do not infer that removing the LED automatically frees PA25: verify the red LED cathode connection and any shared nets, any resistor and power rails before modifying anything. With the board completely unpowered, confirm whether the LED's cathode runs through a current-limiting resistor to GND and whether PA25 has any additional branches. A red LED + GPIO pad can still be fed by surrounding circuitry.
+- If the LED is ultimately removed, use a separate verified transistorized IR LED driver instead of powering an IR emitter directly from PA25; signal-level and drive polarity need bench verification.
+- PA26 / REQ remains user-verified free at first upper pad of P2 (candidate IR RX). No board flash or pinmux enable.
