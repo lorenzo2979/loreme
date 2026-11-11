@@ -29,7 +29,7 @@ GROUPS = {
         "gwir_amebad_rx_fifo.c", "gwir_amebad_rx_vendor.c", "gwir_amebad_rx_irq.c",
         "gwir_amebad_bus.c", "gwir_amebad_vendor_bus.c",
     ],
-    "sdk": ["gwir_sdk_diag.c"],
+    "sdk": ["gwir_sdk_diag.c", "gwir_sdk_hmac.c"],
 }
 
 
@@ -112,7 +112,7 @@ def file_plan():
                 raise ValueError(f"Missing REV9 source {src}")
             plan[TARGET_RELPATH / group / file] = src.read_bytes()
     # Header files have relative inclusion paths; copy matching headers too.
-    for group in ("core", "realtek"):
+    for group in ("core", "realtek", "sdk"):
         for src in sorted((SCRIPT_ROOT / "firmware" / group).glob("*.h")):
             plan[TARGET_RELPATH / group / src.name] = src.read_bytes()
     return plan

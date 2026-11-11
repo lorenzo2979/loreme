@@ -3,6 +3,7 @@
 #include "../core/gwir_protocol.h"
 #include "../core/gwir_engine.h"
 #include "../core/gwir_auth.h"
+#include "gwir_sdk_hmac.h"
 #include "../core/gwir_auth_dispatch.h"
 #include "../realtek/gwir_amebad_tx_codec.h"
 #include "../realtek/gwir_amebad_tx_fifo.h"
@@ -16,6 +17,7 @@ void gwir_sdk_integration_banner(void)
     /* Checks linker reachability and the vendor's real IR struct/API. */
     IR_InitTypeDef ir_cfg;
     uint8_t msg[GWIR_HEADER_SIZE];
+    uint8_t unused_digest[GWIR_AUTH_TAG_BYTES];
     size_t msg_bytes = 0u;
     const uint32_t pulses[2] = {560u, 560u};
     uint32_t tx_words[2];
@@ -38,9 +40,11 @@ void gwir_sdk_integration_banner(void)
     /* Verify new auth gate does not authorize an absent credential. */
     ok = ok && (gwir_auth_init(NULL, NULL, NULL, NULL, NULL) == GWIR_AUTH_REJECT);
     ok = ok && (gwir_auth_dispatch(NULL, NULL, NULL, NULL, 0u, NULL, 0u, NULL, 0u, NULL) == GWIR_AUTH_REJECT);
+    /* Check HMAC provider linking but reject a missing key before crypto. */
+    ok = ok && (gwir_sdk_mbedtls_hmac(NULL, NULL, 32u, msg, sizeof(msg), unused_digest) == GWIR_SDK_HMAC_REJECT);
     /* Verify fail-closed physical-board gate, no IR register access. */
     ok = ok && native_bus_ops.board_ir_ready(native_bus_ops.ctx) == 0;
-    DBG_8195A("[GWIR REV12] SDK link probe %s; e=%u,rxq=%u; IR/WiFi disabled\n",
+    DBG_8195A("[GWIR REV13] SDK link probe %s; e=%u,rxq=%u; IR/WiFi disabled\n",
               ok ? "OK" : "FAIL", (unsigned int)sizeof(gwir_engine),
               (unsigned int)sizeof(gwir_amebad_rx_queue));
 }

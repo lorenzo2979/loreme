@@ -1,0 +1,64 @@
+name: GW006 REV13 - native AmebaD SDK MbedTLS HMAC (NO FLASH)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sdk-native-rev13.yml'
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Host HMAC and regression tests
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq make bc python3 git curl wget unzip bzip2 lib32z1 lib32stdc++6 libssl-dev
+          make test
+          make test-sdk-integration
+      - name: Fetch official AmebaD SDK
+        run: |
+          git clone --depth 1 https://github.com/Ameba-AIoT/ameba-rtos-d.git "$RUNNER_TEMP/ameba-rtos-d"
+          git -C "$RUNNER_TEMP/ameba-rtos-d" rev-parse HEAD > sdk_commit.txt
+      - name: Integrate REV13 C modules and MbedTLS backend
+        run: |
+          python3 scripts/audit_sdk.py "$RUNNER_TEMP/ameba-rtos-d" --output sdk_audit.json
+          python3 scripts/integrate_amebad_sdk.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --dry-run
+          python3 scripts/integrate_amebad_sdk.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --apply
+          grep -q 'gwir_sdk_hmac.c' "$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+      - name: Compile native KM0
+        shell: bash
+        run: |
+          mkdir -p native_logs
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          set +e
+          timeout 1200s make -C "$sdk/project_lp" all > native_logs/km0.log 2>&1
+          rc=$?
+          set -e
+          printf 'KM0_EXIT=%s\n' "$rc" > native_logs/RESULTS.txt
+          exit "$rc"
+      - name: Compile native KM4 with real MbedTLS HMAC backend
+        shell: bash
+        run: |
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          set +e
+          timeout 1500s make -C "$sdk/project_hp" all > native_logs/km4.log 2>&1
+          rc=$?
+          set -e
+          printf 'KM4_EXIT=%s\n' "$rc" >> native_logs/RESULTS.txt
+          grep -E 'gwir_sdk_hmac|mbedtls_md_hmac|undefined reference' native_logs/km4.log > native_logs/hmac_build_hits.txt || true
+          test -s native_logs/hmac_build_hits.txt || { echo 'No evidence HMAC backend compiled'; exit 42; }
+          exit "$rc"
+      - name: Upload logs only - NEVER GW006 firmware binaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-rev13-native-sdk-hmac-logs
+          path: |
+            sdk_commit.txt
+            sdk_audit.json
+            native_logs/
+          retention-days: 14

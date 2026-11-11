@@ -1,0 +1,6 @@
+GW006 IR Universal — CP-08 REV13, 2026-11-11
+Previous REV12 official Realtek KM0/KM4 SDK build SUCCESS, GitHub run 43053708001.
+REV13 links GWAS HMAC-SHA256 via official SDK Mbed TLS; local host and mock SDK tests PASS.
+Physical board unchanged (OpenBeken 1.18.321); no GPIO/IRQ setup, Wi-Fi network or flashing.
+No production credentials shipped. Android core remains JVM-only (not an APK).
+Official REV13 KM0/KM4 SDK build result must be checked on GitHub after source commit.
