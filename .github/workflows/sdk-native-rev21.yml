@@ -1,0 +1,99 @@
+name: GW006 REV21 - Native AmebaD build from source delta (NO FLASH)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sdk-native-rev21.yml'
+      - 'source_bundles/GW006_REV21_GITHUB_DELTA.zip'
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare REV21 source from checksum-verified delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "05a0613c8555f001b14bdc2cc7364ce034fb5047de61469110a643d159c5f179  source_bundles/GW006_REV21_GITHUB_DELTA.zip" | sha256sum -c -
+          unzip -Z -1 source_bundles/GW006_REV21_GITHUB_DELTA.zip | grep -Ev '^(.github/workflows/|firmware/|tests/|scripts/|web/|Makefile$|README.md$)' && exit 1 || true
+          unzip -o -q source_bundles/GW006_REV21_GITHUB_DELTA.zip -d .
+          test -f firmware/core/gwir_apconfig_tcp_transport.c
+          test -f firmware/core/gwir_apconfig_http_stream.c
+          test -f firmware/realtek/gwir_amebad_board_pins.c
+          echo "DELTA_REV21_SHA256=05a0613c8555f001b14bdc2cc7364ce034fb5047de61469110a643d159c5f179" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Host regressions and integration mock
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq make bc python3 git curl wget unzip bzip2 lib32z1 lib32stdc++6 libssl-dev
+          make test test-sdk-integration test-web-assets
+      - name: Clone and pin official Realtek AmebaD SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/Ameba-AIoT/ameba-rtos-d.git "$RUNNER_TEMP/ameba-rtos-d"
+          sdk_sha=7569200fb8304daa61a9f09ccf439ada38d6de2e
+          actual=$(git -C "$RUNNER_TEMP/ameba-rtos-d" rev-parse HEAD)
+          if [ "$actual" != "$sdk_sha" ]; then
+            git -C "$RUNNER_TEMP/ameba-rtos-d" fetch --depth 1 origin "$sdk_sha"
+            git -C "$RUNNER_TEMP/ameba-rtos-d" checkout --detach FETCH_HEAD
+          fi
+          test "$(git -C "$RUNNER_TEMP/ameba-rtos-d" rev-parse HEAD)" = "$sdk_sha"
+          mkdir -p native_logs
+          printf '%s\n' "$sdk_sha" > native_logs/sdk_commit.txt
+      - name: Integrate REV21 safely into KM4 vendor project
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/audit_sdk.py "$RUNNER_TEMP/ameba-rtos-d" --output native_logs/sdk_audit.json
+          python3 scripts/integrate_amebad_sdk.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --dry-run
+          python3 scripts/integrate_amebad_sdk.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --apply
+          vendor_make="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          grep -q 'gwir_apconfig_tcp_transport.c' "$vendor_make"
+          grep -q 'gwir_apconfig_http_stream.c' "$vendor_make"
+          grep -q 'gwir_apconfig_http.c' "$vendor_make"
+          grep -q 'gwir_network_profile.c' "$vendor_make"
+          grep -q 'gwir_amebad_board_pins.c' "$vendor_make"
+      - name: Native KM0
+        shell: bash
+        run: |
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          set +e
+          timeout 1200s make -C "$sdk/project_lp" all > native_logs/km0.log 2>&1
+          rc=$?
+          set -e
+          echo "KM0_EXIT=$rc" | tee -a native_logs/RESULTS.txt
+          if [ "$rc" -ne 0 ]; then tail -n 70 native_logs/km0.log; fi
+          exit "$rc"
+      - name: Native KM4 with REV21 compile evidence
+        shell: bash
+        run: |
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          set +e
+          timeout 1500s make -C "$sdk/project_hp" all > native_logs/km4.log 2>&1
+          rc=$?
+          set -e
+          echo "KM4_EXIT=$rc" | tee -a native_logs/RESULTS.txt
+          if [ "$rc" -ne 0 ]; then
+            tail -n 100 native_logs/km4.log
+            exit "$rc"
+          fi
+          for file in gwir_apconfig_tcp_transport.c gwir_apconfig_http_stream.c gwir_apconfig_http.c gwir_network_profile.c gwir_amebad_board_pins.c; do
+            grep -F "$file" native_logs/km4.log >/dev/null || { echo "Missing compiled source in KM4 log: $file"; exit 42; }
+          done
+          echo "KM4_REV21_SOURCES_COMPILED=YES" | tee -a native_logs/RESULTS.txt
+      - name: Upload diagnostics only (never flash images)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-rev21-native-diagnostics
+          path: native_logs/
+          retention-days: 14
