@@ -30,6 +30,8 @@ jobs:
           python3 scripts/integrate_amebad_sdk.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --dry-run
           python3 scripts/integrate_amebad_sdk.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --apply
           grep -q 'gwir_apconfig_button.c' "$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          grep -q 'gwir_apconfig_session.c' "$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          grep -q 'gwir_sdk_apconfig_wifi.c' "$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
           grep -q 'RTW_SECURITY_OPEN' firmware/sdk/gwir_sdk_apconfig_wifi.c
           ! grep -q 'RTW_SECURITY_WPA2_AES_PSK' firmware/sdk/gwir_sdk_apconfig_wifi.c
           grep -q 'gwir_sdk_apconfig_port.c' "$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp/Makefile"

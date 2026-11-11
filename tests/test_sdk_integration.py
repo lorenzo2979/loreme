@@ -96,6 +96,7 @@ with tempfile.TemporaryDirectory(prefix='gw006_sdk_mock_') as td:
     driver=root/'component/soc/realtek/amebad/fwlib/ram_common/rtl8721d_ir.c'
     for path in (main,mf,inc,hdr,driver): path.parent.mkdir(parents=True,exist_ok=True)
     (main.parent/'include').mkdir(exist_ok=True)
+    shutil.copyfile(PROJ/'tests/stubs/wifi_conf.h', main.parent/'include/wifi_conf.h')
     (main.parent/'include/ameba_soc.h').write_text(AM)
     main.write_text('#include "ameba_soc.h"\nint main(void) {\n\tvTaskStartScheduler();\n}\n')
     # Provide SDK mock scheduler prototype for -Werror
@@ -119,7 +120,7 @@ with tempfile.TemporaryDirectory(prefix='gw006_sdk_mock_') as td:
     env=os.environ.copy(); env['MAKE_INCLUDE_GEN']=str(inc); env['SRCDIR']=str(main.parent)
     make=subprocess.run(['make','-C',str(main.parent),'all'],env=env,capture_output=True,text=True)
     assert make.returncode==0,make.stdout+'\n'+make.stderr
-    assert len(list(main.parent.glob('*.o')))==19,'One of 19 SDK objects was not compiled'
+    assert len(list(main.parent.glob('*.o')))==21,'One of 21 SDK objects was not compiled'
     remove=call(TOOL,root,'--remove');assert remove.returncode==0,remove.stderr
     if originals!=(main.read_bytes(),mf.read_bytes()):
         print('Expected:',[repr(x) for x in originals]);print('Actual:',[repr(x) for x in (main.read_bytes(),mf.read_bytes())]);raise AssertionError('Removal did not restore original source')
@@ -130,4 +131,4 @@ with tempfile.TemporaryDirectory(prefix='gw006_sdk_mock_') as td:
     before=(main.read_bytes(),mf.read_bytes())
     conflict=call(TOOL,root,'--apply');assert conflict.returncode!=0
     assert before==(main.read_bytes(),mf.read_bytes()), 'Collision corrupted SDK project'
-    print('PASS: dry-run, apply, idempotence, 19 mocked-SDK objects, rollback, collision refusal')
+    print('PASS: dry-run, apply, idempotence, 21 mocked-SDK objects, rollback, collision refusal')

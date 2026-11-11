@@ -5,7 +5,7 @@ INCLUDE = -Ifirmware/core
 
 .PHONY: test clean arm-smoke
 
-test: build/test_engine build/test_stream build/test_amebad_tx_codec build/test_amebad_tx_fifo build/test_amebad_rx_fifo build/test_amebad_rx_irq build/test_amebad_bus build/test_auth build/test_auth_dispatch build/test_sdk_hmac build/test_apconfig_button build/mock_tcp_server
+test: build/test_engine build/test_stream build/test_amebad_tx_codec build/test_amebad_tx_fifo build/test_amebad_rx_fifo build/test_amebad_rx_irq build/test_amebad_bus build/test_auth build/test_auth_dispatch build/test_sdk_hmac build/test_apconfig_button build/test_apconfig_session build/test_apconfig_wifi build/mock_tcp_server
 	./build/test_engine
 	./build/test_stream
 	./build/test_amebad_tx_codec
@@ -17,6 +17,8 @@ test: build/test_engine build/test_stream build/test_amebad_tx_codec build/test_
 	./build/test_auth_dispatch
 	./build/test_sdk_hmac
 	./build/test_apconfig_button
+	./build/test_apconfig_session
+	./build/test_apconfig_wifi
 	python3 tests/test_tcp_loopback.py
 
 build/test_engine: tests/test_engine.c $(CORE) firmware/core/gwir_protocol.h firmware/core/gwir_engine.h firmware/core/gwir_capture_builder.h
@@ -87,3 +89,11 @@ build/test_sdk_hmac: tests/test_sdk_hmac.c tests/mock_mbedtls_md.c firmware/sdk/
 build/test_apconfig_button: tests/test_apconfig_button.c firmware/core/gwir_apconfig_button.c firmware/core/gwir_apconfig_button.h
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(INCLUDE) firmware/core/gwir_apconfig_button.c tests/test_apconfig_button.c -o $@
+
+build/test_apconfig_session: tests/test_apconfig_session.c firmware/core/gwir_apconfig_session.c firmware/core/gwir_apconfig_session.h
+	@mkdir -p build
+	$(CC) $(CFLAGS) $(INCLUDE) firmware/core/gwir_apconfig_session.c tests/test_apconfig_session.c -o $@
+
+build/test_apconfig_wifi: tests/test_apconfig_wifi.c firmware/sdk/gwir_sdk_apconfig_wifi.c firmware/core/gwir_apconfig_session.h
+	@mkdir -p build
+	$(CC) $(CFLAGS) $(INCLUDE) -Ifirmware/sdk -Itests/stubs firmware/sdk/gwir_sdk_apconfig_wifi.c tests/test_apconfig_wifi.c -o $@
