@@ -63,3 +63,10 @@ No firmware image flashing, no live pinmux writes authorized by this document.
 - Important **source inconsistency**: AmebaD official SDK example contains *commented* sample lines marked PB29 TX, PB31 RX (reversed). Prior docs noted this disagreement. For selecting PB31 TX, prefer AN0400 table and Arduino pin chart, but verify native pinmux and hardware waveform with actual RTL8721CSM before treating supported.
 - A board lacking speakers/microphones can still route PB31 to a resistor, capacitor, test pad, connector, removed ZS3L, ground or 3.3 V; only a visual inspection plus unpowered ohms/continuity testing can establish that the line is not shared/loaded.
 - Proposed TX path **PB31** (instead of PA25, which is directly tied to red LED anode), and verified PA26 as RX. It is only a **candidate**, not a final assigned GPIO until physical measurement. Do not modify firmware, flash or solder yet.
+
+## User multimeter confirmation — PB31 free (2026-11-11)
+- User **confirmed physically tested**: `PB31` (`AOUTP_L`, WBRG1 module contact 20) is **free** on the user's GW006 PCB. This replaces the earlier unverified occupancy assumption.
+- User previously physically tested `PA26` (`REQ`, module contact 11) free and located its board connection at **P2, first upper pad**.
+- New proposed **native IR pin pairing** for this specific user's board: **TX = PB31**, **RX = PA26**. This pairing allows red LED on PA25, blue LED on PB22 and APConfig button on PB23 to remain untouched.
+- **Important pending validation**: Realtek AN0400 documents PB31=IR_TX, but the SDK's commented sample reverses PB29/PB31 labels; confirm on native SDK/hardware which PinMux is actually driven by IR TX before enabling it. Verify user-tested GPIO's actual board net/voltage, driver stage and receiver polarity with controlled bench testing.
+- User measurements are not yet a demonstrated 38-kHz carrier or successful IR receive. **Do not flash or activate pinmux** until full firmware/board recovery gate is satisfied. Existing OpenBeken remains installed.
