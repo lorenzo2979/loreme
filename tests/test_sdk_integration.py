@@ -115,7 +115,7 @@ with tempfile.TemporaryDirectory(prefix='gw006_sdk_mock_') as td:
     env=os.environ.copy(); env['MAKE_INCLUDE_GEN']=str(inc); env['SRCDIR']=str(main.parent)
     make=subprocess.run(['make','-C',str(main.parent),'all'],env=env,capture_output=True,text=True)
     assert make.returncode==0,make.stdout+'\n'+make.stderr
-    assert len(list(main.parent.glob('*.o')))==14,'One of 14 SDK objects was not compiled'
+    assert len(list(main.parent.glob('*.o')))==16,'One of 16 SDK objects was not compiled'
     remove=call(TOOL,root,'--remove');assert remove.returncode==0,remove.stderr
     if originals!=(main.read_bytes(),mf.read_bytes()):
         print('Expected:',[repr(x) for x in originals]);print('Actual:',[repr(x) for x in (main.read_bytes(),mf.read_bytes())]);raise AssertionError('Removal did not restore original source')
@@ -126,4 +126,4 @@ with tempfile.TemporaryDirectory(prefix='gw006_sdk_mock_') as td:
     before=(main.read_bytes(),mf.read_bytes())
     conflict=call(TOOL,root,'--apply');assert conflict.returncode!=0
     assert before==(main.read_bytes(),mf.read_bytes()), 'Collision corrupted SDK project'
-    print('PASS: dry-run, apply, idempotence, 14 mocked-SDK objects, rollback, collision refusal')
+    print('PASS: dry-run, apply, idempotence, 16 mocked-SDK objects, rollback, collision refusal')

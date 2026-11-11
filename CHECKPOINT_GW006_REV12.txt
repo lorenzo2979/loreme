@@ -1,0 +1,5 @@
+GW006 IR Universal REV12 CHECKPOINT — 11 November 2026
+REV11 native SDK KM0 and KM4 confirmed successful (GitHub Actions run 43051393411).
+REV12 adds GWAS v1 HMAC-SHA256 authenticated envelope and monotonic counter replay guard, Kotlin/JVM matching serialization, fail-closed signed GWIR dispatch.
+Test-only host OpenSSL; native Realtek HMAC backend/provisioning NOT implemented. 16 module mock SDK injection, host GCC/Clang sanitized test suite and Kotlin/JVM tests pass locally.
+Native REV12 SDK compilation to be checked through GitHub Actions. No board pinmux or IR IRQ activation. No network service or APK. OpenBeken 1.18.321 remains untouched; no flash.

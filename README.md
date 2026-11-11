@@ -2,6 +2,14 @@
 
 **Date:** 11 Nov 2026. Portable C engine + Kotlin Android core, **not a flashable Realtek firmware nor an APK**.
 
+## New in REV12
+
+- Portable C GWAS v1 HMAC-SHA256 envelope around the complete GWIR v3 message, with signed direction, per-boot nonce and monotonic anti-replay counter.
+- Fail-closed authenticated dispatcher: tampered, unsigned or replayed packets cannot invoke TX; HMAC backend is a mandatory injected callback, **not yet implemented for the actual Realtek board**.
+- Kotlin/JVM companion protocol using Java's crypto API; cross-language bit-for-bit test against C/OpenSSL; no hard-coded keys.
+- Authenticator and dispatcher injected as two additional source objects into native KM4 SDK project, no Wi-Fi activation, no actual key provisioning.
+- See `docs/REV12_GWAS_SECURITY.md`. **Never expose raw GWIR over LAN or flash this prototype.**
+
 ## New in REV11
 
 - Native/portable half-duplex controller: explicit RX/TX mode arbitration, nonblocking FIFO pump,

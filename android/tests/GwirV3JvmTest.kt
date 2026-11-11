@@ -53,5 +53,32 @@ fun main() {
         check(runCatching { store.saveButton(96,listOf(frame)) }.isFailure)
         check(runCatching { store.saveButton(1,List(6){frame}) }.isFailure)
     } finally { root.listFiles()?.forEach{ it.delete() };root.delete() }
+    testGwirAuthentication()
     println("PASS Kotlin/JVM: protocol v3, durable staged ACK, 96 slots, five frames, max pulses, corruption")
+}
+
+private fun testGwirAuthentication() {
+    val key=ByteArray(32){(it+1).toByte()}
+    val nonce=ByteArray(16){(0xa0+it).toByte()}
+    val client=GwirAuth(key,nonce)
+    val server=GwirAuth(key,nonce)
+    val inner=GwirV3.encode(6,7,"hi".toByteArray(Charsets.US_ASCII))
+    val record=client.wrap(GwirAuth.TO_DEVICE,inner)
+    val hex=record.joinToString(""){ "%02x".format(it.toInt() and 255) }
+    val expected="4757415301010000a0a1a2a3a4a5a6a7a8a9aaabacadaeaf0000000000000001000000164757495203060000000000070000000200cab0b96869ef14e1a5eec5d9924b9ed11d9a05e34229ca947d174e1f7ba04ad73dbc425a2d"
+    check(hex == expected) {"Kotlin/Java HMAC GWAS mismatch against C/OpenSSL test vector"}
+    check(server.unwrap(GwirAuth.TO_DEVICE,record).contentEquals(inner))
+    check(runCatching{server.unwrap(GwirAuth.TO_DEVICE,record)}.isFailure)
+    check(runCatching{server.unwrap(GwirAuth.FROM_DEVICE,record)}.isFailure)
+    val altered=record.clone();altered[38]=(altered[38].toInt() xor 1).toByte()
+    check(runCatching{GwirAuth(key,nonce).unwrap(GwirAuth.TO_DEVICE,altered)}.isFailure)
+    val next=client.wrap(GwirAuth.TO_DEVICE,inner)
+    check(server.unwrap(GwirAuth.TO_DEVICE,next).contentEquals(inner))
+    val rotatedNonce=nonce.clone();rotatedNonce[0]=(rotatedNonce[0].toInt() xor 1).toByte()
+    check(runCatching{GwirAuth(key,rotatedNonce).unwrap(GwirAuth.TO_DEVICE,next)}.isFailure)
+    check(runCatching{GwirAuth(ByteArray(32),nonce)}.isFailure)
+    client.close()
+    check(runCatching{client.wrap(GwirAuth.TO_DEVICE,inner)}.isFailure)
+    server.close()
+    println("PASS Kotlin/JVM: HMAC-SHA256 GWAS cross-language vector, replay and boot nonce separation")
 }

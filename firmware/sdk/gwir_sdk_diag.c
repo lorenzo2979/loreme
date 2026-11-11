@@ -2,6 +2,8 @@
 #include "ameba_soc.h" /* must come from the Realtek SDK, not a shipped shim */
 #include "../core/gwir_protocol.h"
 #include "../core/gwir_engine.h"
+#include "../core/gwir_auth.h"
+#include "../core/gwir_auth_dispatch.h"
 #include "../realtek/gwir_amebad_tx_codec.h"
 #include "../realtek/gwir_amebad_tx_fifo.h"
 #include "../realtek/gwir_amebad_rx_fifo.h"
@@ -33,9 +35,12 @@ void gwir_sdk_integration_banner(void)
        SDK linker reachability for the native RX interrupt bridge. */
     ok = ok && (gwir_amebad_rx_irq_service(NULL, 30000u, NULL) == -1);
     native_bus_ops = gwir_amebad_vendor_bus_ops();
+    /* Verify new auth gate does not authorize an absent credential. */
+    ok = ok && (gwir_auth_init(NULL, NULL, NULL, NULL, NULL) == GWIR_AUTH_REJECT);
+    ok = ok && (gwir_auth_dispatch(NULL, NULL, NULL, NULL, 0u, NULL, 0u, NULL, 0u, NULL) == GWIR_AUTH_REJECT);
     /* Verify fail-closed physical-board gate, no IR register access. */
     ok = ok && native_bus_ops.board_ir_ready(native_bus_ops.ctx) == 0;
-    DBG_8195A("[GWIR REV11] SDK link probe %s; e=%u,rxq=%u; IR/WiFi disabled\n",
+    DBG_8195A("[GWIR REV12] SDK link probe %s; e=%u,rxq=%u; IR/WiFi disabled\n",
               ok ? "OK" : "FAIL", (unsigned int)sizeof(gwir_engine),
               (unsigned int)sizeof(gwir_amebad_rx_queue));
 }

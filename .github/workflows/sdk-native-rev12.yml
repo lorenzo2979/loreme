@@ -1,0 +1,67 @@
+name: GW006 REV12 - native Realtek build and auth checks (NO FLASH)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sdk-native-rev12.yml'
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 65
+    steps:
+      - name: Checkout REV12
+        uses: actions/checkout@v4
+      - name: Prepare host and Realtek build prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq make bc python3 git curl wget unzip bzip2 lib32z1 lib32stdc++6 libssl-dev
+      - name: Auth gate and legacy host regression tests
+        run: |
+          make test
+          make test-sdk-integration
+      - name: Obtain official Realtek AmebaD SDK
+        run: |
+          git clone --depth 1 https://github.com/Ameba-AIoT/ameba-rtos-d.git "$RUNNER_TEMP/ameba-rtos-d"
+          git -C "$RUNNER_TEMP/ameba-rtos-d" rev-parse HEAD > sdk_commit.txt
+      - name: Integrate GWAS and IR modules, NO GPIO activation
+        run: |
+          python3 scripts/audit_sdk.py "$RUNNER_TEMP/ameba-rtos-d" --output sdk_audit.json
+          python3 scripts/integrate_amebad_sdk.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --dry-run
+          python3 scripts/integrate_amebad_sdk.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --apply
+          grep -q 'gwir_auth_dispatch.c' "$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+      - name: Native KM0 build
+        shell: bash
+        run: |
+          mkdir -p native_logs
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          set +e
+          timeout 1200s make -C "$sdk/project_lp" all > native_logs/km0.log 2>&1
+          code=$?
+          set -e
+          echo "KM0_EXIT=$code" > native_logs/RESULTS.txt
+          exit "$code"
+      - name: Native KM4 build with GWAS authenticator
+        shell: bash
+        run: |
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          set +e
+          timeout 1500s make -C "$sdk/project_hp" all > native_logs/km4.log 2>&1
+          code=$?
+          set -e
+          echo "KM4_EXIT=$code" >> native_logs/RESULTS.txt
+          grep -E 'gwir_auth.c|gwir_auth_dispatch.c' native_logs/km4.log > native_logs/auth_build_hits.txt || true
+          if [ "$code" -eq 0 ]; then test -s native_logs/auth_build_hits.txt || exit 42; fi
+          exit "$code"
+      - name: Upload logs only; NEVER firmware images
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-rev12-native-sdk-logs
+          path: |
+            sdk_commit.txt
+            sdk_audit.json
+            native_logs/
+          retention-days: 14

@@ -1,11 +1,11 @@
 CC ?= cc
 CFLAGS ?= -O2 -std=c11 -Wall -Wextra -Werror -pedantic
-CORE = firmware/core/gwir_protocol.c firmware/core/gwir_engine.c firmware/core/gwir_capture_builder.c firmware/core/gwir_stream.c
+CORE = firmware/core/gwir_protocol.c firmware/core/gwir_engine.c firmware/core/gwir_capture_builder.c firmware/core/gwir_stream.c firmware/core/gwir_auth.c firmware/core/gwir_auth_dispatch.c
 INCLUDE = -Ifirmware/core
 
 .PHONY: test clean arm-smoke
 
-test: build/test_engine build/test_stream build/test_amebad_tx_codec build/test_amebad_tx_fifo build/test_amebad_rx_fifo build/test_amebad_rx_irq build/test_amebad_bus build/mock_tcp_server
+test: build/test_engine build/test_stream build/test_amebad_tx_codec build/test_amebad_tx_fifo build/test_amebad_rx_fifo build/test_amebad_rx_irq build/test_amebad_bus build/test_auth build/test_auth_dispatch build/mock_tcp_server
 	./build/test_engine
 	./build/test_stream
 	./build/test_amebad_tx_codec
@@ -13,6 +13,8 @@ test: build/test_engine build/test_stream build/test_amebad_tx_codec build/test_
 	./build/test_amebad_rx_fifo
 	./build/test_amebad_rx_irq
 	./build/test_amebad_bus
+	./build/test_auth >/dev/null
+	./build/test_auth_dispatch
 	python3 tests/test_tcp_loopback.py
 
 build/test_engine: tests/test_engine.c $(CORE) firmware/core/gwir_protocol.h firmware/core/gwir_engine.h firmware/core/gwir_capture_builder.h
@@ -65,3 +67,12 @@ build/test_amebad_rx_irq: tests/test_amebad_rx_irq.c firmware/realtek/gwir_ameba
 build/test_amebad_bus: tests/test_amebad_bus.c firmware/realtek/gwir_amebad_bus.c firmware/realtek/gwir_amebad_tx_fifo.c firmware/realtek/gwir_amebad_tx_codec.c
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(INCLUDE) -Ifirmware/realtek firmware/realtek/gwir_amebad_bus.c firmware/realtek/gwir_amebad_tx_fifo.c firmware/realtek/gwir_amebad_tx_codec.c tests/test_amebad_bus.c -o $@
+
+# OpenSSL is used by host tests ONLY. Target needs separately vetted HMAC backend.
+build/test_auth: tests/test_auth.c firmware/core/gwir_auth.c firmware/core/gwir_protocol.c
+	@mkdir -p build
+	$(CC) $(CFLAGS) $(INCLUDE) firmware/core/gwir_protocol.c firmware/core/gwir_auth.c tests/test_auth.c -lcrypto -o $@
+
+build/test_auth_dispatch: tests/test_auth_dispatch.c firmware/core/gwir_auth_dispatch.c firmware/core/gwir_auth.c $(CORE)
+	@mkdir -p build
+	$(CC) $(CFLAGS) $(INCLUDE) $(CORE) tests/test_auth_dispatch.c -lcrypto -o $@
