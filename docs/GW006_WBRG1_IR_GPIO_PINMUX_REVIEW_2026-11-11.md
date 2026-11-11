@@ -36,3 +36,9 @@ No firmware image flashing, no live pinmux writes authorized by this document.
 - Prior advice identifying PA25/PA26 as "preferred" must be interpreted as *peripheral-mux candidates*, not *confirmed vacant GPIOs*. Both require hardware verification before any soldering, IR pinmux write or flashing.
 - Test with GW006 totally **unpowered**: identify module PA25 and REQ/PA26 solder contacts using the **module pad** diagram (the Tuya datasheet's chip Pin 40/39 are IC pin numbers, not WBRG1 castellated contact numbers); check continuity from each to the red-LED resistor, former ZS3L interface pads, and headers; inspect both PCB sides. If the red LED is connected to PA25, consider isolation only after a board-specific review and backup plan, not just GPIO configuration.
 - Current status: not verified electrically on the user's PCB; retain OpenBeken 1.18.321 and do not flash.
+
+## User-reported PCB trace discovery — P2 top pad (2026-11-11)
+- User reports that the **first candidate GPIO under examination**, following discussion of **PA26/REQ**, appears unused and is accessible at **the uppermost pad of PCB header/pad row P2**. This is a user-reported measurement/location, **not** an independently confirmed schematic net assignment.
+- Working hypothesis: **WBRG1 PA26/REQ -> first pad from top of P2**. Require continuity measurement confirming WBRG1 module contact 11 to this exact P2 contact with power off, and check that the trace is not also connected to resistors, Zigbee nets or other loads.
+- Photograph orientation of board and numbering for P2 must be fixed before wiring. OpenBeken 1.18.321 remains intact; NO pinmux, flashing or soldering yet.
+- PA25/IR TX still needs separate validation because a matching-board report maps it to the red LED.
