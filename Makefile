@@ -5,12 +5,13 @@ INCLUDE = -Ifirmware/core
 
 .PHONY: test clean arm-smoke
 
-test: build/test_engine build/test_stream build/test_amebad_tx_codec build/test_amebad_tx_fifo build/test_amebad_rx_fifo build/mock_tcp_server
+test: build/test_engine build/test_stream build/test_amebad_tx_codec build/test_amebad_tx_fifo build/test_amebad_rx_fifo build/test_amebad_rx_irq build/mock_tcp_server
 	./build/test_engine
 	./build/test_stream
 	./build/test_amebad_tx_codec
 	./build/test_amebad_tx_fifo
 	./build/test_amebad_rx_fifo
+	./build/test_amebad_rx_irq
 	python3 tests/test_tcp_loopback.py
 
 build/test_engine: tests/test_engine.c $(CORE) firmware/core/gwir_protocol.h firmware/core/gwir_engine.h firmware/core/gwir_capture_builder.h
@@ -55,3 +56,7 @@ arm-smoke:
 # Pure mock SDK project wiring test: does NOT build against Realtek proprietary libs.
 test-sdk-integration:
 	python3 tests/test_sdk_integration.py
+
+build/test_amebad_rx_irq: tests/test_amebad_rx_irq.c firmware/realtek/gwir_amebad_rx_irq.c firmware/realtek/gwir_amebad_rx_vendor.c firmware/realtek/gwir_amebad_rx_fifo.c
+	@mkdir -p build
+	$(CC) $(CFLAGS) $(INCLUDE) -Ifirmware/realtek -Itests/stubs $(CORE) firmware/realtek/gwir_amebad_rx_irq.c firmware/realtek/gwir_amebad_rx_vendor.c firmware/realtek/gwir_amebad_rx_fifo.c tests/test_amebad_rx_irq.c -o $@

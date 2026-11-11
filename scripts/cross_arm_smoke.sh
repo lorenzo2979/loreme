@@ -11,7 +11,7 @@ for spec in 'cortex-m23 arm-km0-m23' 'cortex-m33 arm-km4-m33'; do
     cpu=$1
     target=$2
     mkdir -p "build/$target"
-    for name in gwir_amebad_tx_codec gwir_amebad_tx_fifo gwir_amebad_tx_vendor gwir_amebad_rx_fifo gwir_amebad_rx_vendor; do
+    for name in gwir_amebad_tx_codec gwir_amebad_tx_fifo gwir_amebad_tx_vendor gwir_amebad_rx_fifo gwir_amebad_rx_vendor gwir_amebad_rx_irq; do
         "$CLANG" --target=arm-none-eabi -mcpu="$cpu" -mthumb \
           -mfloat-abi=soft -ffreestanding -fno-builtin -O2 \
           -std=c11 -Wall -Wextra -Werror \

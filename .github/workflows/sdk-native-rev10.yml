@@ -1,0 +1,63 @@
+name: GW006 REV10 - AmebaD native SDK build (NO FLASH)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sdk-native-rev10.yml'
+permissions:
+  contents: read
+jobs:
+  realtek-native:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq make bc python3 git curl wget unzip bzip2 lib32z1 lib32stdc++6
+      - name: Obtain official AmebaD SDK
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/Ameba-AIoT/ameba-rtos-d.git "$RUNNER_TEMP/ameba-rtos-d"
+          git -C "$RUNNER_TEMP/ameba-rtos-d" rev-parse HEAD > sdk_commit.txt
+      - name: Integrate GW006 REV10 sources (no GPIO activation)
+        run: |
+          python3 scripts/audit_sdk.py "$RUNNER_TEMP/ameba-rtos-d" --output sdk_audit.json
+          python3 scripts/integrate_amebad_sdk.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --dry-run
+          python3 scripts/integrate_amebad_sdk.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --apply
+          grep -q 'gwir_amebad_rx_irq.c' "$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+      - name: Native KM0
+        shell: bash
+        run: |
+          mkdir -p native_logs
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          set +e
+          timeout 1200s make -C "$sdk/project_lp" all > native_logs/km0.log 2>&1
+          rc=$?
+          set -e
+          echo "KM0_EXIT=$rc" >> native_logs/RESULTS.txt
+          exit "$rc"
+      - name: Native KM4 with GW006 REV10
+        shell: bash
+        run: |
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          set +e
+          timeout 1500s make -C "$sdk/project_hp" all > native_logs/km4.log 2>&1
+          rc=$?
+          set -e
+          echo "KM4_EXIT=$rc" >> native_logs/RESULTS.txt
+          grep -F 'gwir_amebad_rx_irq.c' native_logs/km4.log > native_logs/irq_build_hits.txt || true
+          test -s native_logs/irq_build_hits.txt || { echo 'Missing RX IRQ compile evidence'; exit 42; }
+          exit "$rc"
+      - name: Upload logs only - never firmware
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-rev10-native-sdk-build-logs
+          path: |
+            sdk_commit.txt
+            sdk_audit.json
+            native_logs/
+          retention-days: 14

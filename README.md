@@ -1,6 +1,13 @@
-# GW006 IR Universal Native V2.0 — REV9 AmebaD SDK integration package
+# GW006 IR Universal Native V2.0 — REV10 AmebaD SDK RX IRQ integration
 
 **Date:** 11 Nov 2026. Portable C engine + Kotlin Android core, **not a flashable Realtek firmware nor an APK**.
+
+## New in REV10
+
+- Added native RX IRQ bridge with hardware error discard and timeout-tail FIFO drain.
+- Integrated IRQ source into KM4 build; no pinmux/IRQ registration or board activation.
+- Expanded mock SDK integration to 12 modules, added host IRQ tests and ARM smoke build.
+- Official REV10 SDK compilation must still be checked on GitHub Actions. **Do not flash.**
 
 ## New in REV9
 

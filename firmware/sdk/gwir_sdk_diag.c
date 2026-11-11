@@ -5,6 +5,7 @@
 #include "../realtek/gwir_amebad_tx_codec.h"
 #include "../realtek/gwir_amebad_tx_fifo.h"
 #include "../realtek/gwir_amebad_rx_fifo.h"
+#include "../realtek/gwir_amebad_rx_irq.h"
 
 void gwir_sdk_integration_banner(void)
 {
@@ -25,7 +26,9 @@ void gwir_sdk_integration_banner(void)
     ok = ok && (gwir_amebad_encode_tx(pulses, 2u, 38000u,
                                     tx_words, 2u) == 0);
     ok = ok && (gwir_amebad_tx_begin(&s, tx_words, 2u) == 0);
-    DBG_8195A("[GWIR REV9] SDK link probe %s; e=%u,rxq=%u; IR/WiFi disabled\n",
+    /* No hardware register access: negative-argument path confirms linkage. */
+    ok = ok && (gwir_amebad_rx_irq_service(NULL, 30000u, NULL) == -1);
+    DBG_8195A("[GWIR REV10] SDK link probe %s; e=%u,rxq=%u; IR/WiFi disabled\n",
               ok ? "OK" : "FAIL", (unsigned int)sizeof(gwir_engine),
               (unsigned int)sizeof(gwir_amebad_rx_queue));
 }

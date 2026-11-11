@@ -30,6 +30,25 @@ void IR_Cmd(IR_TypeDef *ir, u32 mode, u32 state);
 u32 IR_FSMRunning(IR_TypeDef *ir);
 u32 IR_GetRxDataLen(IR_TypeDef *ir);
 u32 IR_ReceiveData(IR_TypeDef *ir);
+u32 IR_GetINTStatus(IR_TypeDef *ir);
+u32 IR_GetIMR(IR_TypeDef *ir);
+void IR_MaskINTConfig(IR_TypeDef *ir, u32 mask, u32 state);
+void IR_ClearINTPendingBit(IR_TypeDef *ir, u32 mask);
+void IR_ClearRxFIFO(IR_TypeDef *ir);
+#define DISABLE 0u
+#define IR_RX_FIFO_FULL_INT_STATUS (1u<<0)
+#define IR_RX_FIFO_LEVEL_INT_STATUS (1u<<1)
+#define IR_RX_CNT_OF_INT_STATUS (1u<<2)
+#define IR_RX_FIFO_OF_INT_STATUS (1u<<3)
+#define IR_RX_CNT_THR_INT_STATUS (1u<<4)
+#define IR_RX_FIFO_ERROR_INT_STATUS (1u<<5)
+#define IR_RX_INT_ALL_MASK 0x3fu
+#define IR_RX_FIFO_FULL_INT_CLR IR_RX_FIFO_FULL_INT_STATUS
+#define IR_RX_FIFO_LEVEL_INT_CLR IR_RX_FIFO_LEVEL_INT_STATUS
+#define IR_RX_CNT_OF_INT_CLR IR_RX_CNT_OF_INT_STATUS
+#define IR_RX_FIFO_OF_INT_CLR IR_RX_FIFO_OF_INT_STATUS
+#define IR_RX_CNT_THR_INT_CLR IR_RX_CNT_THR_INT_STATUS
+#define IR_RX_FIFO_ERROR_INT_CLR IR_RX_FIFO_ERROR_INT_STATUS
 void IR_StructInit(IR_InitTypeDef *cfg);
 #endif
 '''
@@ -90,7 +109,7 @@ with tempfile.TemporaryDirectory(prefix='gw006_sdk_mock_') as td:
     env=os.environ.copy(); env['MAKE_INCLUDE_GEN']=str(inc); env['SRCDIR']=str(main.parent)
     make=subprocess.run(['make','-C',str(main.parent),'all'],env=env,capture_output=True,text=True)
     assert make.returncode==0,make.stdout+'\n'+make.stderr
-    assert len(list(main.parent.glob('*.o')))==11,'One of 11 SDK objects was not compiled'
+    assert len(list(main.parent.glob('*.o')))==12,'One of 12 SDK objects was not compiled'
     remove=call(TOOL,root,'--remove');assert remove.returncode==0,remove.stderr
     if originals!=(main.read_bytes(),mf.read_bytes()):
         print('Expected:',[repr(x) for x in originals]);print('Actual:',[repr(x) for x in (main.read_bytes(),mf.read_bytes())]);raise AssertionError('Removal did not restore original source')
@@ -101,4 +120,4 @@ with tempfile.TemporaryDirectory(prefix='gw006_sdk_mock_') as td:
     before=(main.read_bytes(),mf.read_bytes())
     conflict=call(TOOL,root,'--apply');assert conflict.returncode!=0
     assert before==(main.read_bytes(),mf.read_bytes()), 'Collision corrupted SDK project'
-    print('PASS: dry-run, apply, idempotence, 11 mocked-SDK objects, rollback, collision refusal')
+    print('PASS: dry-run, apply, idempotence, 12 mocked-SDK objects, rollback, collision refusal')

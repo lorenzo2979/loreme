@@ -26,7 +26,7 @@ GROUPS = {
     "core": ["gwir_protocol.c", "gwir_engine.c", "gwir_capture_builder.c", "gwir_stream.c"],
     "realtek": [
         "gwir_amebad_tx_codec.c", "gwir_amebad_tx_fifo.c", "gwir_amebad_tx_vendor.c",
-        "gwir_amebad_rx_fifo.c", "gwir_amebad_rx_vendor.c",
+        "gwir_amebad_rx_fifo.c", "gwir_amebad_rx_vendor.c", "gwir_amebad_rx_irq.c",
     ],
     "sdk": ["gwir_sdk_diag.c"],
 }
