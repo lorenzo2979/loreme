@@ -1,0 +1,36 @@
+name: GW006 - Download and inspect official Realtek AmebaD SDK (NO FLASH)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'firmware/**'
+      - 'scripts/audit_sdk.py'
+      - '.github/workflows/sdk-fetch-audit.yml'
+permissions:
+  contents: read
+jobs:
+  sdk-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout GW006 sources
+        uses: actions/checkout@v4
+      - name: Clone correct Realtek SDK for RTL8721CSM
+        shell: bash
+        run: |
+          git clone --depth 1 --branch main https://github.com/Ameba-AIoT/ameba-rtos-d.git "$RUNNER_TEMP/ameba-rtos-d"
+          git -C "$RUNNER_TEMP/ameba-rtos-d" rev-parse HEAD > sdk_commit.txt
+      - name: Audit IR headers, functions and build layout (read-only)
+        shell: bash
+        run: |
+          python3 scripts/audit_sdk.py "$RUNNER_TEMP/ameba-rtos-d" --output sdk_audit.json
+      - name: Test GW006 portable core (NOT firmware)
+        run: make test
+      - name: Upload SDK audit results (not flashable)
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-sdk-audit-no-bin
+          path: |
+            sdk_commit.txt
+            sdk_audit.json
+          retention-days: 14

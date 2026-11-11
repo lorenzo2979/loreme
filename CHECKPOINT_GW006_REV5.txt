@@ -1,0 +1,12 @@
+GW006 IR UNIVERSAL NATIVE V2.0 — REV5 CHECKPOINT (2026-11-11)
+Hardware: RSH-GW006, WBRG1 RTL8721CSM. Existing OpenBeken 1.18.321 remains installed, unchanged.
+A firmware updater or flash operation has NOT been performed and must not be attempted without full backup and recovery.
+The existing OpenBeken .bin is an update image, not an entire flash backup.
+
+User requirement: Android app provides TV36/Clima14/Decoder32/Speaker14 96 keys, persists up to five IR packets each. GW006 native firmware will only do IR RX/TX and Wi-Fi. No heavyweight web UI. No Linux or compiler installation on user's PC.
+
+REV5 has C engine + Kotlin storage and protocol codec. Wire protocol version 3, because an explicit RX_ACK was introduced. RX_READ is nondestructive, repeated read survives TCP reconnect while GW006 remains powered, wrong ACK fails, valid ACK dequeues. Android has CRC-checked temporary capture inbox before ACK and persistent 96×5 files. GCC/Clang ASAN+UBSAN tests and Kotlin/JVM tests passed. These are SIMULATED HOST TESTS, not target board tests.
+
+IMPORTANT OPEN ITEMS: Realtek ameba-rtos-d SDK not downloaded into this container (GitHub DNS unavailable); no actual vendor HAL adapter; no Wi-Fi AP/STA server; no pairing/auth, replay-safe TX, no Android UI/APK, no KM0/KM4 binary, no physical IR tests or flash/bootloader backup.
+
+DO NOT FLASH THIS PROJECT. Use github workflows SDK audit for exact API names when available. Keep OpenBeken and the user's saved .bin safe.

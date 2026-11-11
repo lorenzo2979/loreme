@@ -1,0 +1,24 @@
+cc -O2 -std=c11 -Wall -Wextra -Werror -pedantic -Ifirmware/core firmware/core/gwir_protocol.c firmware/core/gwir_engine.c firmware/core/gwir_capture_builder.c firmware/core/gwir_stream.c tests/test_engine.c -o build/test_engine
+cc -O2 -std=c11 -Wall -Wextra -Werror -pedantic -Ifirmware/core firmware/core/gwir_protocol.c firmware/core/gwir_engine.c firmware/core/gwir_capture_builder.c firmware/core/gwir_stream.c tests/test_stream.c -o build/test_stream
+cc -O2 -std=c11 -Wall -Wextra -Werror -pedantic -Ifirmware/core -Ifirmware/realtek firmware/realtek/gwir_amebad_tx_codec.c tests/test_amebad_tx_codec.c -o build/test_amebad_tx_codec
+cc -O2 -std=c11 -Wall -Wextra -Werror -pedantic -Ifirmware/core -Ifirmware/realtek -Itests/stubs firmware/realtek/gwir_amebad_tx_fifo.c firmware/realtek/gwir_amebad_tx_vendor.c firmware/realtek/gwir_amebad_tx_codec.c tests/test_amebad_tx_fifo.c -o build/test_amebad_tx_fifo
+cc -O2 -std=c11 -Wall -Wextra -Werror -pedantic -Ifirmware/core -Ifirmware/realtek -Itests/stubs firmware/core/gwir_protocol.c firmware/core/gwir_engine.c firmware/core/gwir_capture_builder.c firmware/core/gwir_stream.c firmware/realtek/gwir_amebad_rx_fifo.c firmware/realtek/gwir_amebad_rx_vendor.c tests/test_amebad_rx_fifo.c -o build/test_amebad_rx_fifo
+cc -O2 -std=c11 -Wall -Wextra -Werror -pedantic -Ifirmware/core firmware/core/gwir_protocol.c firmware/core/gwir_engine.c firmware/core/gwir_capture_builder.c firmware/core/gwir_stream.c tests/mock_tcp_server.c -o build/mock_tcp_server
+./build/test_engine
+PASS CRC framing, acknowledged five-frame FIFO, RAW timing assembler, idle flush, overflow, 2048 timings, bounds
+./build/test_stream
+PASS stream fragmented/coalesced/header/max-frame/CRC/failure cases
+./build/test_amebad_tx_codec
+PASS AmebaD TX encoder: 38kHz timing, alternating MARK/SPACE, FIFO flags, bounds, 2048 samples, no partial output
+./build/test_amebad_tx_fifo
+PASS: AmebaD TX FIFO 1..2048 words, refill, final flag, FSM, SDK shim
+./build/test_amebad_rx_fifo
+PASS: AmebaD RX FIFO decode, polarity, idle, IRQ shim, overflow/error discard, resync
+python3 tests/test_tcp_loopback.py
+PASS loopback TCP: framing, reconnect, repeated read, ACK, stale/duplicate ACK, TX
+kotlinc android/core/*.kt android/tests/*.kt -include-runtime -d build/gwir_v3_jvm_test.jar
+java -jar build/gwir_v3_jvm_test.jar
+PASS Kotlin/JVM: protocol v3, durable staged ACK, 96 slots, five frames, max pulses, corruption
+./scripts/cross_arm_smoke.sh
+PASS compile-only cortex-m23 with test stub (NOT linked/SDK-tested)
+PASS compile-only cortex-m33 with test stub (NOT linked/SDK-tested)

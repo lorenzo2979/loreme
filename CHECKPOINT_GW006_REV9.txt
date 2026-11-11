@@ -1,0 +1,24 @@
+GW006 IR UNIVERSAL — CHECKPOINT REV9 / CP-05
+Data: 11 novembre 2026
+
+Hardware: Tuya RSH-GW006, WBRG1/RTL8721CSM, OpenBeken 1.18.321 funzionante.
+Nessun flash, nessun cambio di pin o hardware.
+
+Risultato REV9:
+- Sorgenti REV8 mantenuti: protocollo GWIR v3, 5 frame, RX ACK, FIFO TX e RX, codice Kotlin per 96 tasti.
+- Verificato su GitHub il vero layout dell'SDK AmebaD (src_hp/Makefile, src_hp/main.c, fwlib IR, project_hp/Makefile.include.gen).
+- Script scripts/integrate_amebad_sdk.py che aggiunge 10 moduli GWIR e modifica solo i due file src_hp/Makefile e src_hp/main.c con blocchi marcati.
+- File firmware/sdk/gwir_sdk_diag.c: SOLO controllo link e log, non tocca pinmux, GPIO, Wi-Fi, stack TCP o periferiche IR.
+- Test mock SDK: 11 oggetti C compilati (main SDK e 10 GWIR), apply ripetibile, dry-run, rollback, rifiuto conflitti.
+- Test GCC, Clang con ASan/UBSan, Kotlin JVM, TCP localhost e ARM compile-only ripetuti.
+- Workflow manuale .github/workflows/sdk-native-rev9.yml per clonare SDK, applicare patch, tentare build KM0/KM4 su GitHub Actions (non eseguito).
+
+Limiti:
+- Repository SDK completo non scaricabile nell'ambiente di questa conversazione (risoluzione DNS github.com non disponibile).
+- NESSUN link nativo KM0/KM4 completato, NESSUN BIN installabile.
+- Pin IR: PA18/PA19 sono UART nel datasheet WBRG1; pinmux IR sulla GW006 ancora non verificato. Nessun ricablaggio.
+- Nessuna autenticazione o anti-replay, TCP hardware non attivo; CRC non offre autenticazione.
+- Nessun APK Android, solo componenti/test Kotlin JVM.
+- Il backup di OpenBeken non è stato verificato come dump integrale.
+
+Prossimo passo: trasferire tutti i sorgenti REV9 in un repository GitHub e avviare manualmente workflow SDK native build, leggere errori reali, correggerli. Non flashare fino a recupero, pinmux, trasporto sicuro e test hardware.

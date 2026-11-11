@@ -1,0 +1,52 @@
+GW006 IR UNIVERSAL — CHECKPOINT CP-04 / REV8 — 11/11/2026
+=======================================================
+
+HARDWARE / LIMITI NON MODIFICABILI
+- Scheda Tuya GW006, modulo WBRG1/RTL8721CSM.
+- OpenBeken 1.18.321 resta funzionante e non è stato modificato.
+- Collegamenti storici PA19 TX / PA18 RX: UART0, NON documentati come
+  pin IR nativi. Nessun ricablaggio né firmware flashati.
+- Firmware installabile RTL8721CSM: non disponibile.
+- Nessuna credenziale inserita nel codice; TCP del progetto NON autenticato.
+
+BASE E FUNZIONALITA'
+- REV7: core GWIR protocol v3, TX code conversion and FIFO pump, RX_ACK,
+  up to five temporary IR frames with max 2048 pulses each; Kotlin/JVM
+  durable storage model for 96 buttons, not Android APK.
+- REV8: native-style RX bridge Realtek IR_GetRxDataLen/IR_ReceiveData,
+  ISR software ring of 512 events, conversion RX counter tick->us,
+  low/high active MARK polarity, idle detection, builder/engine integration.
+- RX overrun/error: discard partial frame until a subsequent idle gap.
+- RX worker requires real IR IRQ masking callbacks from board firmware.
+- RX captures use a configured *guess* for carrier/duty, NOT measured value.
+
+TEST REPLICATI E VERIFICATI NELL'AMBIENTE
+- make test GCC: PASS for engine, stream, TX FIFO, TX codec, RX FIFO, TCP.
+- make test with Clang -fsanitize=address,undefined: PASS.
+- make test-kotlin: PASS (JVM only).
+- make arm-smoke: PASS; ten unlinked ARM EABI .o for Cortex-M23 and
+  Cortex-M33, using test stub ameba_soc.h and no official SDK link.
+- RX tests include idle/long-space framing, inactive polarity, 32-word
+  vendor FIFO, partial-frame rejection, overflow, resync, 900 events
+  of queue index wrap-around.
+- Host sizeof: engine 49,280B; RX queue 4,108B; RX worker 8,280B.
+  Together ~61,668B, excluding other modules and task stacks.
+  Target memory layout is NOT verified.
+
+ANCORA DA REALIZZARE
+1. Scaricare/integrare l'SDK completo AmebaD e compilare/linkare KM0/KM4.
+2. Verificare sul PCB native IR pinmux, LED/button conflicts, electrical I/O.
+3. Integrare vero IRQ, Init/DeInit peripheral, clock and FreeRTOS thread,
+   half-duplex RX/TX control, TX timing and all gaps.
+4. Mettere in sicurezza Wi-Fi/TCP (credenziali, autenticazione, anti-replay).
+5. Integrare una vera app Android e produrre APK.
+6. Preparare backup verificato + procedura di ripristino prima di flash.
+
+SCELTA TECNICA
+Non compilare un falso .bin e NON flashare i .o. Conservare OpenBeken.
+Per continuare: progettare/compilare il vero task IR e SDK application
+con pinmux solo dopo verifica hardware.
+
+DETTAGLI E COMANDI: docs/TEST_RESULTS_REV8.md e firmware/realtek/
+RX_PORTING_GUIDE_REV8.md. L'archivio di sviluppo REV8 contiene sorgenti,
+manifest SHA256, dieci oggetti ARM non linkati e risultati dei test.

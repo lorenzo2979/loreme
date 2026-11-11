@@ -1,0 +1,17 @@
+GW006 IR Universal Native V2.0 — REV6 checkpoint — 2026-11-11
+=============================================================
+Source base: GW006_IR_NATIVE_V2_REV5_ACK_ANDROID_SRC.zip from the user's Library.
+Preserve installed OpenBeken 1.18.321; do not flash any new firmware yet.
+
+CURRENT STATUS
+- All original REV5 C host GCC/Clang tests and Kotlin/JVM tests pass after clean rebuild.
+- Native IR TX FIFO conversion module + host tests added and passing (REV6).
+- SDK vendor code inspected via linked GitHub: rtl8721d_ir.h EXISTS in official ameba-rtos-d. The historical missing-header error reflected an incomplete or different SDK tree, not absence from the official repo.
+- The vendor examples select native IR pin pairs: PA25/PA26, PB23/PB22, PB29/PB31.
+- Former proposed PA19 TX / PA18 RX is NOT validated as native IR pinmux on the GW006.
+- No SDK downloaded to the build container (DNS access blocked); no arm-none-eabi GCC; no KM0/KM4 native firmware compiled.
+- RX interrupt handler, IR TX FIFO streaming, AP/STA TCP server, pairing/authentication and anti-replay still need implementation.
+- No Android APK built, no full flash backup verified, no physical tests.
+
+PLEASE READ docs/REALTEK_SDK_VERIFIED.md, docs/TEST_RESULTS_REV6.md and firmware/realtek/PORTING_GUIDE.md.
+NEXT PRIORITY: pinmux access/board verification and complete SDK cross-compilation environment; do NOT confuse a portable host program with a GW006 .bin.

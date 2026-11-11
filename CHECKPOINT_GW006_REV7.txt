@@ -1,0 +1,26 @@
+GW006 IR Universal V2 — REV7 checkpoint — 2026-11-11
+===================================================
+Source base: GW006_IR_NATIVE_V2_REV6_REALTEK_TX_CODEC_SRC.zip.
+Keep GW006 OpenBeken 1.18.321 installed and unmodified.
+
+NEW IMPLEMENTATION
+- Native IR TX FIFO staged refill (32 words FIFO) in portable C.
+- Vendor Realtek TX adapter referencing actual SDK function names.
+- Simulated vendor header for HOST BUILD ONLY; no proprietary SDK bundled.
+- Unit tests at 1,2,31,32,33,64,2048 words and failure conditions.
+
+VERIFIED
+- GCC/Clang ASan/UBSan native host tests all PASS.
+- Kotlin/JVM core tests PASS.
+- arm-none-eabi Cortex-M23 and Cortex-M33 relocatable objects built with Clang.
+- Exact CPU instruction set correction: RTL8721CSM KM0=M23-compatible, KM4=M33-compatible, NOT M0/M4.
+- Tuya module pinout says PA18=UART0 TX, PA19=UART0 RX; previous PA19 TX / PA18 RX drawing NOT a documented native IR pair.
+- Realtek sample native IR pairs include PA25 TX / PA26 RX, PB23 TX / PB22 RX. Actual GW006 PCB routing still unverified.
+
+NOT DONE
+- No complete Realtek SDK downloaded or actually used to link/build.
+- No native RX HAL, native FreeRTOS scheduler, socket/Wi-Fi, authentication or real IR test.
+- No firmware .bin, no APK, no flashing, no full backup verified.
+
+Next: secure SDK-based build and hardware pinmux validation before any flash.
+See docs/TEST_RESULTS_REV7.md and docs/TUYA_WBRG1_PIN_AUDIT_REV7.md.

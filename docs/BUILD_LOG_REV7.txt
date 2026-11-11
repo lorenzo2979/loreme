@@ -1,0 +1,14 @@
+GW006 REV7 - BUILD PROVENANCE (2026-11-11)
+======================================
+Build host: Linux x86_64; compiler GCC system default; Clang 17.
+Commands actually executed:
+    make clean && make test
+    make clean && make CC=clang CFLAGS='-O1 -g -std=c11 -Wall -Wextra -Werror -pedantic -fno-omit-frame-pointer -fsanitize=address,undefined' test
+    make test-kotlin
+    make arm-smoke
+Results: PASS for all host C, TCP loopback, Kotlin/JVM and compile-only ARM C components.
+
+ARM architectures: cortex-m23 (KM0-compatible), cortex-m33 (KM4-compatible).
+Host C tests use mock IR and sockets, not GW006 hardware.
+ARM modules were compiled against tests/stubs/ameba_soc.h to check a subset of API names.
+No Realtek SDK link, no FreeRTOS link, no flash image, no APK and no device tests.

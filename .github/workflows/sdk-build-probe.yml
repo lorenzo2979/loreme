@@ -1,0 +1,50 @@
+name: GW006 - Realtek SDK native build probe (NO FLASH)
+# Explicit manual action only; does not touch a device and does not publish
+# firmware files for flashing. The purpose is to discover missing dependencies.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 55
+    steps:
+      - name: Checkout GW006 integration project
+        uses: actions/checkout@v4
+      - name: Install tools on GitHub runner only (NOT on user's PC)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq make bc gcc-arm-none-eabi binutils-arm-none-eabi python3
+      - name: Clone official SDK (correct RTL872xCS series)
+        run: |
+          git clone --depth 1 --branch main https://github.com/Ameba-AIoT/ameba-rtos-d.git "$RUNNER_TEMP/ameba-rtos-d"
+          git -C "$RUNNER_TEMP/ameba-rtos-d" rev-parse HEAD > sdk_commit.txt
+          python3 scripts/audit_sdk.py "$RUNNER_TEMP/ameba-rtos-d" --output sdk_audit.json
+      - name: Probe KM0/KM4 native toolchain (not GW006 custom firmware)
+        shell: bash
+        run: |
+          mkdir -p probe_logs
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          echo "This probe does NOT integrate GW006 sources and is NOT flash-ready." > probe_logs/README.txt
+          echo "Compiler: $(arm-none-eabi-gcc --version | head -n 1)" >> probe_logs/README.txt
+          set +e
+          timeout 1000s make -C "$sdk/project_lp" all > probe_logs/km0.log 2>&1
+          rc0=$?
+          timeout 1000s make -C "$sdk/project_hp" all > probe_logs/km4.log 2>&1
+          rc4=$?
+          set -e
+          printf 'KM0_build_exit=%s\nKM4_build_exit=%s\n' "$rc0" "$rc4" > probe_logs/RESULTS.txt
+          echo 'Build exit 0 is NOT evidence of GW006 compatibility.' >> probe_logs/RESULTS.txt
+          find "$sdk" -iname '*.bin' -printf '%P  %s bytes\n' | sort > probe_logs/SDK_IMAGE_INVENTORY.txt
+          cat probe_logs/RESULTS.txt
+      - name: Upload logs ONLY (no flashable image artifact)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-sdk-toolchain-probe-logs
+          path: |
+            sdk_commit.txt
+            sdk_audit.json
+            probe_logs/
+          retention-days: 14

@@ -1,0 +1,11 @@
+name: GW006 core tests only (NO FLASHABLE BIN)
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  portable-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test protocol and engine with host GCC
+        run: make test

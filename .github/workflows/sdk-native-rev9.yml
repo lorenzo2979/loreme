@@ -1,0 +1,66 @@
+name: GW006 REV9 - native AmebaD SDK build probe (NO FLASH)
+# Manual only. Clones full Realtek SDK on a disposable GitHub runner.
+# Does not publish firmware binaries or flash any board.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  realtek-sdk-build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 65
+    steps:
+      - name: Checkout GW006 REV9 sources
+        uses: actions/checkout@v4
+      - name: Prepare tools (GitHub runner only)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq make bc python3 git curl wget unzip bzip2 lib32z1 lib32stdc++6
+      - name: Fetch and pin official AmebaD SDK
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/Ameba-AIoT/ameba-rtos-d.git "$RUNNER_TEMP/ameba-rtos-d"
+          git -C "$RUNNER_TEMP/ameba-rtos-d" rev-parse HEAD > sdk_commit.txt
+      - name: Integrate GW006 core into Realtek KM4 project
+        shell: bash
+        run: |
+          python3 scripts/audit_sdk.py "$RUNNER_TEMP/ameba-rtos-d" --output sdk_audit.json
+          python3 scripts/integrate_amebad_sdk.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --dry-run
+          python3 scripts/integrate_amebad_sdk.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --apply
+          grep -q 'GWIR_REV9_START' "$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+      - name: Build official KM0 (prerequisite only)
+        id: km0
+        shell: bash
+        run: |
+          mkdir -p native_logs
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          set +e
+          timeout 1200s make -C "$sdk/project_lp" all > native_logs/km0.log 2>&1
+          rc=$?
+          set -e
+          printf 'KM0_EXIT=%s\n' "$rc" > native_logs/RESULTS.txt
+          exit "$rc"
+      - name: Build KM4 WITH GW006 objects, linked into SDK image
+        id: km4
+        shell: bash
+        run: |
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          set +e
+          timeout 1500s make -C "$sdk/project_hp" all > native_logs/km4.log 2>&1
+          rc=$?
+          set -e
+          printf 'KM4_EXIT=%s\n' "$rc" >> native_logs/RESULTS.txt
+          grep -F 'gwir_sdk_diag' native_logs/km4.log > native_logs/gwir_build_hits.txt || true
+          find "$sdk" -name '*.bin' -printf '%P %s bytes\n' > native_logs/sdk_bin_inventory.txt
+          # These are native SDK images, NOT verified for WBRG1 board or flash safety.
+          exit "$rc"
+      - name: Upload logs only, NEVER firmware images
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-rev9-native-sdk-build-logs
+          path: |
+            sdk_commit.txt
+            sdk_audit.json
+            native_logs/
+          retention-days: 14
