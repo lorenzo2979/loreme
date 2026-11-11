@@ -1,0 +1,6 @@
+GW006 IR UNIVERSAL — REV11 11/11/2026
+Base REV10: Realtek KM0/KM4 compilation success, CI run 43048212204. Native SDK build tests verified by GitHub.
+New: portable half-duplex IR controller (OFF/RX/TX/GAP/FAULT), FIFO refill, bounded timeout and fault recovery. Vendor C adapter for Realtek official HAL is linked but BOARD READY ALWAYS FALSE. No GPIO pinmux or IRQ enabled; nothing runs on physical board.
+Local tests: GCC, Clang Address/UBSan, 14 fake SDK objects, Kotlin/JVM, Cortex M23/M33 smoke. All local tests pass; native REV11 build pending verification.
+AmebaD vendor SDK source intentionally not bundled. OpenBeken 1.18.321 remains intact on GW006.
+Blocked: verify actual GW006 pinmux, install FreeRTOS IRQ/task, authenticated WiFi transport, memory map backup and rollback, Android APK. DO NOT FLASH.

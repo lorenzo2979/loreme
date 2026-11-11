@@ -3,7 +3,15 @@
 /* Build-only shim for testing vendor API signatures. It is NOT the SDK. */
 #include <stdint.h>
 typedef uint32_t u32;
+#define IR_MODE_RX (1u << 31)
+#define IR_RX_COUNT_LOW_LEVEL 0u
+#define portTICK_PERIOD_MS 1u
+u32 xTaskGetTickCount(void);
+typedef struct { u32 IR_Mode, IR_Freq, IR_DutyCycle, IR_RxFIFOThrLevel, IR_RxCntThrType, IR_RxCntThr; } IR_InitTypeDef;
+void IR_StructInit(IR_InitTypeDef *c);
 typedef struct { uint32_t _mock; } IR_TypeDef;
+void IR_Init(IR_TypeDef *ir, IR_InitTypeDef *c);
+void IR_ClearTxFIFO(IR_TypeDef *ir);
 extern IR_TypeDef gwir_ir_test_device;
 #define IR_DEV (&gwir_ir_test_device)
 #define IR_MODE_TX 0u
@@ -17,7 +25,7 @@ u32 IR_FSMRunning(IR_TypeDef *ir);
 u32 IR_GetRxDataLen(IR_TypeDef *ir);
 u32 IR_ReceiveData(IR_TypeDef *ir);
 
-/* Realtek IRQ API mock; distinct test-only flags, NOT hardware bits. */
+/* Realtek IRQ API mock; values are distinct flags, not real chip register bits. */
 #define DISABLE 0u
 #define IR_RX_FIFO_FULL_INT_STATUS  (1u << 0)
 #define IR_RX_FIFO_LEVEL_INT_STATUS (1u << 1)

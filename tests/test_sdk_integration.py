@@ -17,7 +17,11 @@ AM = '''#ifndef STUB_AMEBA_SOC_H
 #include <stdint.h>
 typedef uint32_t u32;
 typedef struct { uint32_t mock; } IR_TypeDef;
-typedef struct { uint32_t IR_Freq; } IR_InitTypeDef;
+typedef struct { uint32_t IR_Mode, IR_Freq, IR_DutyCycle, IR_RxFIFOThrLevel, IR_RxCntThrType, IR_RxCntThr; } IR_InitTypeDef;
+#define IR_MODE_RX (1u<<31)
+#define IR_RX_COUNT_LOW_LEVEL 0u
+#define portTICK_PERIOD_MS 1u
+u32 xTaskGetTickCount(void);
 #define IR_DEV ((IR_TypeDef*)0)
 #define IR_MODE_TX 0u
 #define TRUE 1u
@@ -50,6 +54,8 @@ void IR_ClearRxFIFO(IR_TypeDef *ir);
 #define IR_RX_CNT_THR_INT_CLR IR_RX_CNT_THR_INT_STATUS
 #define IR_RX_FIFO_ERROR_INT_CLR IR_RX_FIFO_ERROR_INT_STATUS
 void IR_StructInit(IR_InitTypeDef *cfg);
+void IR_Init(IR_TypeDef *ir, IR_InitTypeDef *cfg);
+void IR_ClearTxFIFO(IR_TypeDef *ir);
 #endif
 '''
 
@@ -91,7 +97,7 @@ with tempfile.TemporaryDirectory(prefix='gw006_sdk_mock_') as td:
     (main.parent/'include/ameba_soc.h').write_text(AM)
     main.write_text('#include "ameba_soc.h"\nint main(void) {\n\tvTaskStartScheduler();\n}\n')
     # Provide SDK mock scheduler prototype for -Werror
-    (main.parent/'include/ameba_soc.h').write_text(AM.replace('void IR_StructInit(IR_InitTypeDef *cfg);','void IR_StructInit(IR_InitTypeDef *cfg);\nvoid vTaskStartScheduler(void);'))
+    (main.parent/'include/ameba_soc.h').write_text(AM.replace('void IR_ClearTxFIFO(IR_TypeDef *ir);', 'void IR_ClearTxFIFO(IR_TypeDef *ir);\nvoid vTaskStartScheduler(void);'))
     mf.write_text(MAKE)
     inc.write_text(INC)
     hdr.write_text('#define SDK_REALTEK_IR_HEADER 1\n')
@@ -109,7 +115,7 @@ with tempfile.TemporaryDirectory(prefix='gw006_sdk_mock_') as td:
     env=os.environ.copy(); env['MAKE_INCLUDE_GEN']=str(inc); env['SRCDIR']=str(main.parent)
     make=subprocess.run(['make','-C',str(main.parent),'all'],env=env,capture_output=True,text=True)
     assert make.returncode==0,make.stdout+'\n'+make.stderr
-    assert len(list(main.parent.glob('*.o')))==12,'One of 12 SDK objects was not compiled'
+    assert len(list(main.parent.glob('*.o')))==14,'One of 14 SDK objects was not compiled'
     remove=call(TOOL,root,'--remove');assert remove.returncode==0,remove.stderr
     if originals!=(main.read_bytes(),mf.read_bytes()):
         print('Expected:',[repr(x) for x in originals]);print('Actual:',[repr(x) for x in (main.read_bytes(),mf.read_bytes())]);raise AssertionError('Removal did not restore original source')
@@ -120,4 +126,4 @@ with tempfile.TemporaryDirectory(prefix='gw006_sdk_mock_') as td:
     before=(main.read_bytes(),mf.read_bytes())
     conflict=call(TOOL,root,'--apply');assert conflict.returncode!=0
     assert before==(main.read_bytes(),mf.read_bytes()), 'Collision corrupted SDK project'
-    print('PASS: dry-run, apply, idempotence, 12 mocked-SDK objects, rollback, collision refusal')
+    print('PASS: dry-run, apply, idempotence, 14 mocked-SDK objects, rollback, collision refusal')

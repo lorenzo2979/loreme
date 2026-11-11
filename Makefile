@@ -5,13 +5,14 @@ INCLUDE = -Ifirmware/core
 
 .PHONY: test clean arm-smoke
 
-test: build/test_engine build/test_stream build/test_amebad_tx_codec build/test_amebad_tx_fifo build/test_amebad_rx_fifo build/test_amebad_rx_irq build/mock_tcp_server
+test: build/test_engine build/test_stream build/test_amebad_tx_codec build/test_amebad_tx_fifo build/test_amebad_rx_fifo build/test_amebad_rx_irq build/test_amebad_bus build/mock_tcp_server
 	./build/test_engine
 	./build/test_stream
 	./build/test_amebad_tx_codec
 	./build/test_amebad_tx_fifo
 	./build/test_amebad_rx_fifo
 	./build/test_amebad_rx_irq
+	./build/test_amebad_bus
 	python3 tests/test_tcp_loopback.py
 
 build/test_engine: tests/test_engine.c $(CORE) firmware/core/gwir_protocol.h firmware/core/gwir_engine.h firmware/core/gwir_capture_builder.h
@@ -60,3 +61,7 @@ test-sdk-integration:
 build/test_amebad_rx_irq: tests/test_amebad_rx_irq.c firmware/realtek/gwir_amebad_rx_irq.c firmware/realtek/gwir_amebad_rx_vendor.c firmware/realtek/gwir_amebad_rx_fifo.c
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(INCLUDE) -Ifirmware/realtek -Itests/stubs $(CORE) firmware/realtek/gwir_amebad_rx_irq.c firmware/realtek/gwir_amebad_rx_vendor.c firmware/realtek/gwir_amebad_rx_fifo.c tests/test_amebad_rx_irq.c -o $@
+
+build/test_amebad_bus: tests/test_amebad_bus.c firmware/realtek/gwir_amebad_bus.c firmware/realtek/gwir_amebad_tx_fifo.c firmware/realtek/gwir_amebad_tx_codec.c
+	@mkdir -p build
+	$(CC) $(CFLAGS) $(INCLUDE) -Ifirmware/realtek firmware/realtek/gwir_amebad_bus.c firmware/realtek/gwir_amebad_tx_fifo.c firmware/realtek/gwir_amebad_tx_codec.c tests/test_amebad_bus.c -o $@

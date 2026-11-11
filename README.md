@@ -1,13 +1,25 @@
-# GW006 IR Universal Native V2.0 — REV10 AmebaD SDK RX IRQ integration
+# GW006 IR Universal Native V2.0 — REV11 half-duplex controller and SDK integration
 
 **Date:** 11 Nov 2026. Portable C engine + Kotlin Android core, **not a flashable Realtek firmware nor an APK**.
 
+## New in REV11
+
+- Native/portable half-duplex controller: explicit RX/TX mode arbitration, nonblocking FIFO pump,
+  end-of-transmission detection, inter-frame gap, timeout and fault recovery.
+- **Hardware authorization fails closed**: the SDK-backed adapter returns `board_ir_ready=0`
+  until a physical PCB/pinmux/IRQ review is completed. No pin changes, no driver activation.
+- Additional tests simulate FIFO backpressure, clock wrap, lost pins, failed hardware stop,
+  and prevent TX while RX is active.
+- Vendor SDK native build to be checked in CI; no GW006 flashable image.
+
 ## New in REV10
 
-- Added native RX IRQ bridge with hardware error discard and timeout-tail FIFO drain.
-- Integrated IRQ source into KM4 build; no pinmux/IRQ registration or board activation.
-- Expanded mock SDK integration to 12 modules, added host IRQ tests and ARM smoke build.
-- Official REV10 SDK compilation must still be checked on GitHub Actions. **Do not flash.**
+- Added Realtek RX interrupt-status bridge `gwir_amebad_rx_irq.{c,h}`. It drains the 32-word HW FIFO on RX counter timeout (not only the FIFO threshold interrupt), forwards errors to the software queue, flushes corrupt FIFO after overflow, and clears pending flags.
+- `gwir_amebad_rx_irq_bind()` merely binds a queue in RAM; **no IRQ registration, clock, pinmux, transmission, Wi-Fi or flash happens by default**. Registering and enabling the real IRQ is reserved for a future board-specific module after the GW006 pinmux is electrically verified.
+- `gwir_sdk_integration_banner()` checks native link reachability of this bridge with an invalid-argument call that performs no hardware operations.
+- Added mock-hardware interrupt status tests and expanded SDK mock build from 11 to 12 compiled objects. New module also included in ARM smoke test.
+- **Do not flash**: linkable RX IRQ handling is not yet a complete, commissioned IR transceiver nor an authenticated Wi-Fi application.
+- See `docs/REV10_RX_IRQ_INTEGRATION.md`.
 
 ## New in REV9
 
