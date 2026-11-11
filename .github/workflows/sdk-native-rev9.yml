@@ -1,8 +1,12 @@
 name: GW006 REV9 - native AmebaD SDK build probe (NO FLASH)
-# Manual only. Clones full Realtek SDK on a disposable GitHub runner.
+# Manual, or automatically when THIS workflow is edited on main. Clones official SDK on a disposable runner.
 # Does not publish firmware binaries or flash any board.
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sdk-native-rev9.yml'
 permissions:
   contents: read
 jobs:
