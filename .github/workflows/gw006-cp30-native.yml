@@ -61,6 +61,28 @@ jobs:
           python3 scripts/integrate_amebad_sdk.py --sdk "$sdk" --dry-run
           python3 scripts/integrate_amebad_sdk.py --sdk "$sdk" --apply
           python3 scripts/verify_native_km4_objects.py --sdk "$sdk" --phase preflight --output native_logs/km4_preflight.json
+      - name: Snapshot native KM4 objects before vendor cleanup (runner only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          p = Path(os.environ["RUNNER_TEMP"]) / "ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          s = p.read_text()
+          anchor = "all: CLEAN_OBJS CORE_TARGETS COPY_RAM_OBJS\\n"
+          if s.count(anchor) != 1:
+              raise SystemExit("Refusing unexpected vendor src_hp Makefile layout")
+          recipe = (
+              '\\t@mkdir -p "$GITHUB_WORKSPACE/native_logs/object_snapshot"\\n'
+              '\\t@for obj in $(OBJS); do \\\\\\n'
+              '\\t  test -s "$obj" || exit 71; \\\\\\n'
+              '\\t  cp -p "$obj" "$GITHUB_WORKSPACE/native_logs/object_snapshot/$obj" || exit 72; \\\\\\n'
+              '\\t  cmp -s "$obj" "$GITHUB_WORKSPACE/native_logs/object_snapshot/$obj" || exit 73; \\\\\\n'
+              '\\tdone\\n'
+          )
+          p.write_text(s.replace(anchor, anchor + recipe, 1))
+          PY
       - name: Realtek KM0 native compilation and link
         shell: bash
         run: |
@@ -85,6 +107,14 @@ jobs:
           set -e
           printf 'KM4_CP29_EXIT=%s\n' "$rc" | tee -a native_logs/RESULTS.txt
           if [ "$rc" -ne 0 ]; then tail -n 160 native_logs/km4.log; exit "$rc"; fi
+          # The vendor deletes src_hp/*.o after copying/linking them. Restore
+          # byte-identical copies captured during the actual build; preserve
+          # their original mtime for the freshness and ELF validators.
+          object_dir="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp"
+          snapshot="$GITHUB_WORKSPACE/native_logs/object_snapshot"
+          test -d "$snapshot"
+          test "$(find "$snapshot" -maxdepth 1 -type f -name 'gwir_*.o' | wc -l)" -eq 35
+          for obj in "$snapshot"/*.o; do cp -p "$obj" "$object_dir/"; done
           python3 scripts/verify_native_km4_objects.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --phase postbuild --build-start-file native_logs/km4.start --output native_logs/km4_objects.json
           python3 scripts/verify_native_km4_link_map.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --build-start-file native_logs/km4.start --output native_logs/km4_final_link.json
           echo 'KM4_CP29_35_OBJECTS_AND_FINAL_LINK=PASS' | tee -a native_logs/RESULTS.txt
