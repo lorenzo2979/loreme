@@ -34,6 +34,18 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq make bc python3 git curl wget unzip bzip2 lib32z1 lib32stdc++6 libssl-dev
+          # CP27: keep the *legacy REV21* host mock definitions complete.
+          # This edits only tests/stubs on the runner, never the SDK or GW006.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("tests/stubs/ameba_soc.h")
+          s = p.read_text()
+          entries = {"_PB_31": "0x3fu", "_PA_26": "0x1au", "_PB_23": "0x37u", "_PA_25": "0x19u", "_PB_22": "0x36u"}
+          for name, value in entries.items():
+              if "#define " + name + " " not in s:
+                  s = "#define " + name + " " + value + "\n" + s
+          p.write_text(s)
+          PY
           make test test-sdk-integration test-web-assets
       - name: Clone and pin official Realtek AmebaD SDK
         shell: bash
