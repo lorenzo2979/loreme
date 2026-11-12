@@ -3,7 +3,7 @@ name: GW006 REV21 - Native AmebaD build from source delta (NO FLASH)
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, review/gw006-cp23-native-probe]
     paths:
       - '.github/workflows/sdk-native-rev21.yml'
       - 'source_bundles/GW006_REV21_GITHUB_DELTA.zip'
