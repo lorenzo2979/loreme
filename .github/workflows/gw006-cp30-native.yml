@@ -1,0 +1,127 @@
+name: GW006 CP30 - CP29 source-locked native KM0 KM4 (NO FLASH)
+
+on:
+  push:
+    branches: [review/gw006-cp30-native-source]
+    paths:
+      - '.github/workflows/gw006-cp30-native.yml'
+      - 'source_bundles/GW006_CP30_GITHUB_REVIEW_SYNC_SOURCE_ONLY.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify ZIP checksum, extract CP29 sources, and validate source lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '8252096eaf5728e98d6329238f5fd7f0b335c7ad953a65f9406d9ea99ab531e4  source_bundles/GW006_CP30_GITHUB_REVIEW_SYNC_SOURCE_ONLY.zip' | sha256sum -c -
+          unzip -q -o source_bundles/GW006_CP30_GITHUB_REVIEW_SYNC_SOURCE_ONLY.zip -d .
+          mkdir -p native_logs
+          python3 scripts/verify_release_sources.py
+          python3 tests/test_source_manifest.py
+          python3 tests/test_native_km4_objects.py
+          python3 tests/test_native_km4_link_map.py
+          python3 tests/test_runtime_readiness.py
+          python3 scripts/audit_runtime_readiness.py --output native_logs/runtime_readiness.json
+          echo 'CP29_SOURCE_HASHES_VERIFIED=YES' | tee -a native_logs/RESULTS.txt
+      - name: Host regression and mock SDK tests (never flashes a device)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq make bc python3 git curl wget unzip bzip2 lib32z1 lib32stdc++6 libssl-dev
+          make test test-sdk-integration test-web-assets
+          make test-flash-playback-sanitized test-saved-play-auth-sanitized
+          python3 tests/test_flash_map_audit.py
+      - name: Clone official Realtek SDK at pinned commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_sha=7569200fb8304daa61a9f09ccf439ada38d6de2e
+          git clone --depth 1 https://github.com/Ameba-AIoT/ameba-rtos-d.git "$RUNNER_TEMP/ameba-rtos-d"
+          if [ "$(git -C "$RUNNER_TEMP/ameba-rtos-d" rev-parse HEAD)" != "$sdk_sha" ]; then
+            git -C "$RUNNER_TEMP/ameba-rtos-d" fetch --depth 1 origin "$sdk_sha"
+            git -C "$RUNNER_TEMP/ameba-rtos-d" checkout --detach FETCH_HEAD
+          fi
+          test "$(git -C "$RUNNER_TEMP/ameba-rtos-d" rev-parse HEAD)" = "$sdk_sha"
+          printf '%s\n' "$sdk_sha" > native_logs/sdk_commit.txt
+      - name: Audit and integrate all 35 CP29 modules on the runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/ameba-rtos-d"
+          python3 scripts/audit_sdk.py "$sdk" --output native_logs/sdk_audit.json
+          python3 scripts/integrate_amebad_sdk.py --sdk "$sdk" --dry-run
+          python3 scripts/integrate_amebad_sdk.py --sdk "$sdk" --apply
+          python3 scripts/verify_native_km4_objects.py --sdk "$sdk" --phase preflight --output native_logs/km4_preflight.json
+      - name: Snapshot native KM4 objects before vendor cleanup (runner only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          p = Path(os.environ["RUNNER_TEMP"]) / "ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          s = p.read_text()
+          anchor = "all: CLEAN_OBJS CORE_TARGETS COPY_RAM_OBJS\n"
+          if s.count(anchor) != 1:
+              raise SystemExit("Refusing unexpected vendor src_hp Makefile layout")
+          recipe = (
+              '\t@mkdir -p "$$GITHUB_WORKSPACE/native_logs/object_snapshot"\n'
+              '\t@for obj in $(OBJS); do \\\n'
+              '\t  test -s "$$obj" || exit 71; \\\n'
+              '\t  cp -p "$$obj" "$$GITHUB_WORKSPACE/native_logs/object_snapshot/$$obj" || exit 72; \\\n'
+              '\t  cmp -s "$$obj" "$$GITHUB_WORKSPACE/native_logs/object_snapshot/$$obj" || exit 73; \\\n'
+              '\tdone\n'
+          )
+          p.write_text(s.replace(anchor, anchor + recipe, 1))
+          PY
+      - name: Realtek KM0 native compilation and link
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          set +e
+          timeout 1200s make -C "$sdk/project_lp" all > native_logs/km0.log 2>&1
+          rc=$?
+          set -e
+          printf 'KM0_CP29_EXIT=%s\n' "$rc" | tee -a native_logs/RESULTS.txt
+          if [ "$rc" -ne 0 ]; then tail -n 100 native_logs/km0.log; fi
+          exit "$rc"
+      - name: Realtek KM4 native compilation with all-object and final-link verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          touch native_logs/km4.start
+          set +e
+          timeout 1500s make -C "$sdk/project_hp" all > native_logs/km4.log 2>&1
+          rc=$?
+          set -e
+          printf 'KM4_CP29_EXIT=%s\n' "$rc" | tee -a native_logs/RESULTS.txt
+          if [ "$rc" -ne 0 ]; then tail -n 160 native_logs/km4.log; exit "$rc"; fi
+          # The vendor deletes src_hp/*.o after copying/linking them. Restore
+          # byte-identical copies captured during the actual build; preserve
+          # their original mtime for the freshness and ELF validators.
+          object_dir="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp"
+          snapshot="$GITHUB_WORKSPACE/native_logs/object_snapshot"
+          test -d "$snapshot"
+          test "$(find "$snapshot" -maxdepth 1 -type f -name 'gwir_*.o' | wc -l)" -eq 35
+          for obj in "$snapshot"/*.o; do cp -p "$obj" "$object_dir/"; done
+          python3 scripts/verify_native_km4_objects.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --phase postbuild --build-start-file native_logs/km4.start --output native_logs/km4_objects.json
+          python3 scripts/verify_native_km4_link_map.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --build-start-file native_logs/km4.start --output native_logs/km4_final_link.json
+          echo 'KM4_CP29_35_OBJECTS_AND_FINAL_LINK=PASS' | tee -a native_logs/RESULTS.txt
+      - name: Upload diagnostic logs only (NO FLASHABLE BIN)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-cp29-native-diagnostics-only
+          path: native_logs/
+          retention-days: 14
