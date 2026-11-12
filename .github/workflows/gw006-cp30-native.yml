@@ -5,7 +5,7 @@ on:
     branches: [review/gw006-cp30-native-source]
     paths:
       - '.github/workflows/gw006-cp30-native.yml'
-      - 'source_bundles/GW006_CP29_GITHUB_REVIEW_SYNC_SOURCE_ONLY.zip'
+      - 'source_bundles/GW006_CP30_GITHUB_REVIEW_SYNC_SOURCE_ONLY.zip'
   workflow_dispatch:
 
 permissions:
@@ -21,8 +21,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo '0c2c5ac593cc5999729fed69d70967876d79ac600f88c4284207f6596ebd24f9  source_bundles/GW006_CP29_GITHUB_REVIEW_SYNC_SOURCE_ONLY.zip' | sha256sum -c -
-          unzip -q -o source_bundles/GW006_CP29_GITHUB_REVIEW_SYNC_SOURCE_ONLY.zip -d .
+          echo '8252096eaf5728e98d6329238f5fd7f0b335c7ad953a65f9406d9ea99ab531e4  source_bundles/GW006_CP30_GITHUB_REVIEW_SYNC_SOURCE_ONLY.zip' | sha256sum -c -
+          unzip -q -o source_bundles/GW006_CP30_GITHUB_REVIEW_SYNC_SOURCE_ONLY.zip -d .
           mkdir -p native_logs
           python3 scripts/verify_release_sources.py
           python3 tests/test_source_manifest.py
