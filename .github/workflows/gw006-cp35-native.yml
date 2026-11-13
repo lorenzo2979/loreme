@@ -32,12 +32,12 @@ jobs:
               z.extractall('.')
           PY
           # The SHA-pinned CP32 ZIP plus this exact CP33 overlay reconstructs the full CP33 source tree.
-          echo '0c44beed342d1dd53c9b6fb2ffd6f0226cdfe406c0ddbb62856b1ff22e8e2c54  source_bundles/GW006_CP35_SOURCE_DELTA_NO_FLASH.zip' | sha256sum -c -
+          echo '0c44beed342d1dd53c9b6fb2ffd6f0226cdfe406c0ddbb62856b1ff22e8e2c54  source_bundles/GW006_CP33_SOURCE_DELTA_NO_FLASH.zip' | sha256sum -c -
           python3 - <<'PY'
           from pathlib import Path, PurePosixPath
           import stat
           import zipfile
-          with zipfile.ZipFile('source_bundles/GW006_CP35_SOURCE_DELTA_NO_FLASH.zip') as z:
+          with zipfile.ZipFile('source_bundles/GW006_CP33_SOURCE_DELTA_NO_FLASH.zip') as z:
               seen = set()
               for entry in z.infolist():
                   member = PurePosixPath(entry.filename)
