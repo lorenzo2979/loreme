@@ -93,6 +93,24 @@ jobs:
           set -e
           printf 'KM4_CP31_EXIT=%s\n' "$rc" | tee -a native_logs/RESULTS.txt
           if [ "$rc" -ne 0 ]; then tail -n 140 native_logs/km4.log; exit "$rc"; fi
+          # CP31_PATH_PROBE: show where vendor Make leaves real .o files,
+          # WITHOUT weakening the strict postbuild gate or uploading binaries.
+          src_dir="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp"
+          ram_dir="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk/build/ram"
+          {
+            printf 'PROBE_SOURCE_DIR=%s\\n' "$src_dir"
+            printf 'PROBE_RAM_DIR=%s\\n' "$ram_dir"
+            for dir in "$src_dir" "$ram_dir"; do
+              printf 'DIRECTORY=%s\\n' "$dir"
+              test -d "$dir" && find "$dir" -maxdepth 1 -name 'gwir_*.o' -printf '%f %s bytes\\n' | sort || :
+            done
+            for name in gwir_apconfig_button.o gwir_runtime_owner.o gwir_engine.o; do
+              for dir in "$src_dir" "$ram_dir"; do
+                test -f "$dir/$name" && printf 'PRESENT=%s/%s\\n' "$dir" "$name" || printf 'MISSING=%s/%s\\n' "$dir" "$name"
+              done
+            done
+          } > native_logs/object_paths.txt
+          tail -n 16 native_logs/object_paths.txt
           python3 scripts/verify_native_km4_objects.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --phase postbuild --build-start-file native_logs/km4.start --output native_logs/km4_objects.json
           echo 'KM4_CP31_36_OBJECTS=PASS' | tee -a native_logs/RESULTS.txt
       - name: Final-link functional reachability gate (fail closed; diagnostic)
