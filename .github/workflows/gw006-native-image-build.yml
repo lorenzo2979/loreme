@@ -265,9 +265,12 @@ jobs:
                   "installable":False,"flashed":False,"files":[]}
           for name in expected:
               choices=[p for p in root.rglob(name) if "/asdk/image/" in str(p)]
-              if len(choices)!=1:
-                  raise SystemExit(f"Expected one vendor-generated {name}; found {len(choices)}: {choices}")
-              p=choices[0]
+              if not choices:
+                  raise SystemExit(f"Vendor did not generate {name}")
+              digests={hashlib.sha256(p.read_bytes()).hexdigest() for p in choices}
+              if len(digests)!=1:
+                  raise SystemExit(f"Different copies of {name} generated: {choices}")
+              p=next((p for p in choices if "/project_hp/" in str(p)),choices[0])
               data=p.read_bytes()
               if len(data)<1024 or len(data)>8*1024*1024:
                   raise SystemExit(f"Unreasonable native image size for {name}: {len(data)}")
