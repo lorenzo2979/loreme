@@ -68,6 +68,24 @@ jobs:
           python3 scripts/integrate_amebad_sdk.py --sdk "$sdk" --dry-run
           python3 scripts/integrate_amebad_sdk.py --sdk "$sdk" --apply
           grep -F 'gwir_runtime_owner.c' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          # CP31: on runner only, capture genuine vendor objects at the
+          # Makefile COPY_RAM_OBJS stage, before later SDK cleanup.
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          sdk=Path(os.environ["RUNNER_TEMP"])/"ameba-rtos-d"
+          make=sdk/"project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          code=make.read_text()
+          marker="all: CLEAN_OBJS CORE_TARGETS COPY_RAM_OBJS"
+          if code.count(marker)!=1 or "GWIR_CP31_SNAPSHOT" in code:
+              raise SystemExit("Unexpected vendor Makefile: refusing instrumentation")
+          code += ("\\n.PHONY: GWIR_CP31_SNAPSHOT\\n"
+                   "all: GWIR_CP31_SNAPSHOT\\n"
+                   "GWIR_CP31_SNAPSHOT: COPY_RAM_OBJS\\n"
+                   "\\t@mkdir -p "+str(Path(os.environ["RUNNER_TEMP"])/"gwir-cp31-snapshot")+"\\n"
+                   "\\t@cp -f gwir_*.o "+str(Path(os.environ["RUNNER_TEMP"])/"gwir-cp31-snapshot")+"/\\n")
+          make.write_text(code)
+          PY
           python3 scripts/verify_native_km4_objects.py --sdk "$sdk" --phase preflight --output native_logs/km4_preflight.json
       - name: Native Realtek KM0 (no flash)
         shell: bash
@@ -111,6 +129,14 @@ jobs:
             done
           } > native_logs/object_paths.txt
           tail -n 16 native_logs/object_paths.txt
+          # Fail if a single object was not captured at actual vendor make time.
+          snapshot="$RUNNER_TEMP/gwir-cp31-snapshot"
+          src_dir="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp"
+          shopt -s nullglob
+          objects=("$snapshot"/gwir_*.o)
+          test "${#objects[@]}" -eq 36 || { echo "Expected 36 native snapshot objects, got ${#objects[@]}"; exit 43; }
+          cp -p "${objects[@]}" "$src_dir/"
+          find "$snapshot" -maxdepth 1 -name 'gwir_*.o' -printf '%f %s bytes\\n' | sort > native_logs/object_snapshot_inventory.txt
           python3 scripts/verify_native_km4_objects.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --phase postbuild --build-start-file native_logs/km4.start --output native_logs/km4_objects.json
           echo 'KM4_CP31_36_OBJECTS=PASS' | tee -a native_logs/RESULTS.txt
       - name: Final-link functional reachability gate (fail closed; diagnostic)
