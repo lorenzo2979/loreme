@@ -79,11 +79,11 @@ jobs:
           marker="all: CLEAN_OBJS CORE_TARGETS COPY_RAM_OBJS"
           if code.count(marker)!=1 or "GWIR_CP31_SNAPSHOT" in code:
               raise SystemExit("Unexpected vendor Makefile: refusing instrumentation")
-          code += ("\\n.PHONY: GWIR_CP31_SNAPSHOT\\n"
-                   "all: GWIR_CP31_SNAPSHOT\\n"
-                   "GWIR_CP31_SNAPSHOT: COPY_RAM_OBJS\\n"
-                   "\\t@mkdir -p "+str(Path(os.environ["RUNNER_TEMP"])/"gwir-cp31-snapshot")+"\\n"
-                   "\\t@cp -f gwir_*.o "+str(Path(os.environ["RUNNER_TEMP"])/"gwir-cp31-snapshot")+"/\\n")
+          code += ("\n.PHONY: GWIR_CP31_SNAPSHOT\n"
+                   "all: GWIR_CP31_SNAPSHOT\n"
+                   "GWIR_CP31_SNAPSHOT: COPY_RAM_OBJS\n"
+                   "\t@mkdir -p "+str(Path(os.environ["RUNNER_TEMP"])/"gwir-cp31-snapshot")+"\n"
+                   "\t@cp -f gwir_*.o "+str(Path(os.environ["RUNNER_TEMP"])/"gwir-cp31-snapshot")+"/\n")
           make.write_text(code)
           PY
           python3 scripts/verify_native_km4_objects.py --sdk "$sdk" --phase preflight --output native_logs/km4_preflight.json
