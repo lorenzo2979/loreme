@@ -84,7 +84,7 @@ jobs:
               z.extractall('.')
           PY
           # CP37: audited overlay; tested source has 166 locked files and 40 C modules.
-          echo '275d64d207d33213f54295e7c0b46f031df4cdd4bcd77e13ead0c4d4a91c65b3  source_bundles/GW006_CP37_SOURCE_DELTA_NO_FLASH.zip' | sha256sum -c -
+          echo 'ac75d408e41e32c4314b2c1c48b12c17d1db560b2bf7b6b99c7803cdb4433625  source_bundles/GW006_CP37_SOURCE_DELTA_NO_FLASH.zip' | sha256sum -c -
           python3 - <<'PY'
           from pathlib import PurePosixPath
           import stat, zipfile
@@ -97,7 +97,7 @@ jobs:
                       i.filename in seen or stat.S_ISLNK(i.external_attr >> 16)):
                       raise SystemExit('Unsafe CP37 source overlay')
                   seen.add(i.filename)
-              if len(seen) != 14 or 'firmware/sdk/gwir_sdk_bootstrap.c' not in seen:
+              if len(seen) != 15 or 'firmware/sdk/gwir_sdk_bootstrap.c' not in seen:
                   raise SystemExit('Wrong CP37 overlay file set')
               z.extractall('.')
           PY
