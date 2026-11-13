@@ -1,0 +1,262 @@
+name: GW006 CP38 - native KM0 KM4 boot reachability (NO FLASH)
+
+on:
+  push:
+    branches: [review/gw006-cp38-ir-pipeline]
+    paths:
+      - '.github/workflows/gw006-cp38-native.yml'
+      - 'source_bundles/GW006_CP38_SOURCE_DELTA_NO_FLASH.zip'
+      - 'source_bundles/GW006_CP32_SOURCE_ONLY_NO_FLASH.zip'
+      - 'source_bundles/GW006_CP35_SOURCE_DELTA_NO_FLASH.zip'
+      - 'source_bundles/GW006_CP36_DIAGNOSTICS_DELTA_NO_FLASH.zip'
+      - 'source_bundles/GW006_CP37_SOURCE_DELTA_NO_FLASH.zip'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify immutable source archive and all 41 C modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'd705c7238e092cf2ef1a3f91c2fa800e2ea1a64a02c5b6432cc43f32ac16ca03  source_bundles/GW006_CP32_SOURCE_ONLY_NO_FLASH.zip' | sha256sum -c -
+          python3 - <<'PY'
+          import pathlib, zipfile
+          p=pathlib.Path('source_bundles/GW006_CP32_SOURCE_ONLY_NO_FLASH.zip')
+          with zipfile.ZipFile(p) as z:
+              for i in z.infolist():
+                  q=pathlib.PurePosixPath(i.filename)
+                  if q.is_absolute() or '..' in q.parts or i.is_dir() or (i.external_attr >> 16) & 0o170000 == 0o120000:
+                      raise SystemExit('Unsafe ZIP member: '+i.filename)
+              z.extractall('.')
+          PY
+          # The SHA-pinned CP32 ZIP plus this exact CP33 overlay reconstructs the full CP33 source tree.
+          echo '0c44beed342d1dd53c9b6fb2ffd6f0226cdfe406c0ddbb62856b1ff22e8e2c54  source_bundles/GW006_CP33_SOURCE_DELTA_NO_FLASH.zip' | sha256sum -c -
+          python3 - <<'PY'
+          from pathlib import Path, PurePosixPath
+          import stat
+          import zipfile
+          with zipfile.ZipFile('source_bundles/GW006_CP33_SOURCE_DELTA_NO_FLASH.zip') as z:
+              seen = set()
+              for entry in z.infolist():
+                  member = PurePosixPath(entry.filename)
+                  if entry.is_dir() or member.is_absolute() or '..' in member.parts or entry.filename in seen or stat.S_ISLNK(entry.external_attr >> 16):
+                      raise SystemExit('Unsafe CP33 delta entry: ' + entry.filename)
+                  seen.add(entry.filename)
+              if len(seen) != 18:
+                  raise SystemExit('Incorrect CP33 delta count')
+              z.extractall('.')
+          PY
+          # Overlay only the 13 vetted CP35 changes onto the pinned CP33 sources.
+          echo 'c772127937def5bb3a3379e32b4dc7f74d4d7c66652e5a834ffbc47508a99aea  source_bundles/GW006_CP35_SOURCE_DELTA_NO_FLASH.zip' | sha256sum -c -
+          python3 - <<'PY'
+          from pathlib import PurePosixPath
+          import stat, zipfile
+          with zipfile.ZipFile('source_bundles/GW006_CP35_SOURCE_DELTA_NO_FLASH.zip') as z:
+              entries = z.infolist()
+              names = set()
+              for i in entries:
+                  p = PurePosixPath(i.filename)
+                  if i.is_dir() or p.is_absolute() or '..' in p.parts or i.filename in names or stat.S_ISLNK(i.external_attr >> 16):
+                      raise SystemExit('Unsafe CP35 overlay: ' + i.filename)
+                  names.add(i.filename)
+              if len(names) != 13:
+                  raise SystemExit('Wrong CP35 overlay count')
+              z.extractall('.')
+          PY
+          # CP36: overlay 3 verified diagnostics files; unchanged firmware C.
+          echo '1bec487c6860d17be5ceae01f8eea74e6d5ddd3aa9a9b247ff4182c85ff49079  source_bundles/GW006_CP36_DIAGNOSTICS_DELTA_NO_FLASH.zip' | sha256sum -c -
+          python3 - <<'PY'
+          from pathlib import Path, PurePosixPath
+          import stat, zipfile
+          expected={'scripts/verify_native_km4_link_map.py','tests/test_native_km4_link_map.py','docs/CP21_SOURCE_MANIFEST.json'}
+          with zipfile.ZipFile('source_bundles/GW006_CP36_DIAGNOSTICS_DELTA_NO_FLASH.zip') as z:
+              names=[i.filename for i in z.infolist()]
+              if len(names)!=len(expected) or set(names)!=expected:
+                  raise SystemExit('CP36 overlay file allowlist mismatch')
+              for i in z.infolist():
+                  p=PurePosixPath(i.filename)
+                  if i.is_dir() or p.is_absolute() or '..' in p.parts or stat.S_ISLNK(i.external_attr>>16):
+                      raise SystemExit('Unsafe CP36 overlay entry')
+              z.extractall('.')
+          PY
+          # CP37: audited overlay; tested source has 166 locked files and 40 C modules.
+          echo 'ac75d408e41e32c4314b2c1c48b12c17d1db560b2bf7b6b99c7803cdb4433625  source_bundles/GW006_CP37_SOURCE_DELTA_NO_FLASH.zip' | sha256sum -c -
+          python3 - <<'PY'
+          from pathlib import PurePosixPath
+          import stat, zipfile
+          with zipfile.ZipFile('source_bundles/GW006_CP37_SOURCE_DELTA_NO_FLASH.zip') as z:
+              all_entries=z.infolist()
+              seen=set()
+              for i in all_entries:
+                  path=PurePosixPath(i.filename)
+                  if (i.is_dir() or path.is_absolute() or '..' in path.parts or
+                      i.filename in seen or stat.S_ISLNK(i.external_attr >> 16)):
+                      raise SystemExit('Unsafe CP37 source overlay')
+                  seen.add(i.filename)
+              if len(seen) != 15 or 'firmware/sdk/gwir_sdk_bootstrap.c' not in seen:
+                  raise SystemExit('Wrong CP37 overlay file set')
+              z.extractall('.')
+          PY
+          # CP38: verified 23-file IR pipeline overlay onto the exact CP37 tree.
+          echo '1f11b6291ed81892b3cbfa1fad1a21f81e20aebd0940926472be7d44c3a388ed  source_bundles/GW006_CP38_SOURCE_DELTA_NO_FLASH.zip' | sha256sum -c -
+          python3 - <<'PY'
+          from pathlib import Path, PurePosixPath
+          import stat,zipfile
+          path=Path('source_bundles/GW006_CP38_SOURCE_DELTA_NO_FLASH.zip')
+          with zipfile.ZipFile(path) as z:
+              entries=z.infolist()
+              found=set()
+              for entry in entries:
+                  p=PurePosixPath(entry.filename)
+                  if (entry.is_dir() or p.is_absolute() or '..' in p.parts or
+                      entry.filename in found or stat.S_ISLNK(entry.external_attr >> 16)):
+                      raise SystemExit('Unsafe CP38 overlay entry: '+entry.filename)
+                  found.add(entry.filename)
+              if len(found)!=23 or not {'firmware/realtek/gwir_ir_pipeline.c',
+                      'firmware/realtek/gwir_ir_pipeline.h', 'tests/test_ir_pipeline.c'}.issubset(found):
+                  raise SystemExit('Unexpected CP38 overlay set')
+              z.extractall('.')
+          PY
+          mkdir -p native_logs
+          python3 scripts/verify_release_sources.py
+          python3 tests/test_source_manifest.py
+          python3 tests/test_native_km4_objects.py
+          python3 tests/test_native_km4_link_map.py
+          python3 scripts/audit_runtime_readiness.py --output native_logs/runtime_readiness.json
+          echo 'CP38_SHA256_SOURCE_LOCK_41=PASS' | tee -a native_logs/RESULTS.txt
+      - name: Host protocol, HMAC, saved playback, sanitizers and SDK mock
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq make bc python3 git curl wget unzip bzip2 lib32z1 lib32stdc++6 libssl-dev
+          make test test-sdk-integration test-web-assets
+          make test-sdk-bootstrap-sanitized test-sdk-secure-start-sanitized test-runtime-owner-sanitized test-flash-playback-sanitized test-saved-play-auth-sanitized test-auth-socket-sanitized
+          # CP38: real bus->capture pipeline under ASan/UBSan, no pinmux or flash.
+          cc -O1 -g -std=c11 -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -Ifirmware/core -Ifirmware/realtek \
+            firmware/core/gwir_protocol.c firmware/core/gwir_engine.c firmware/core/gwir_capture_builder.c \
+            firmware/core/gwir_stream.c firmware/core/gwir_auth.c firmware/core/gwir_auth_dispatch.c \
+            firmware/realtek/gwir_amebad_bus.c firmware/realtek/gwir_amebad_tx_fifo.c \
+            firmware/realtek/gwir_amebad_tx_codec.c firmware/realtek/gwir_amebad_rx_fifo.c \
+            firmware/realtek/gwir_ir_pipeline.c tests/test_ir_pipeline.c \
+            -o /tmp/gwir_cp38_pipeline_asan
+          ASAN_OPTIONS=detect_leaks=1 /tmp/gwir_cp38_pipeline_asan
+          python3 tests/test_flash_map_audit.py
+          echo 'CP38_HOST_TESTS=PASS' | tee -a native_logs/RESULTS.txt
+      - name: Pin complete official AmebaD SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_sha=7569200fb8304daa61a9f09ccf439ada38d6de2e
+          git clone --depth 1 https://github.com/Ameba-AIoT/ameba-rtos-d.git "$RUNNER_TEMP/ameba-rtos-d"
+          if [ "$(git -C "$RUNNER_TEMP/ameba-rtos-d" rev-parse HEAD)" != "$sdk_sha" ]; then
+            git -C "$RUNNER_TEMP/ameba-rtos-d" fetch --depth 1 origin "$sdk_sha"
+            git -C "$RUNNER_TEMP/ameba-rtos-d" checkout --detach FETCH_HEAD
+          fi
+          test "$(git -C "$RUNNER_TEMP/ameba-rtos-d" rev-parse HEAD)" = "$sdk_sha"
+          printf '%s\n' "$sdk_sha" > native_logs/sdk_commit.txt
+      - name: Native SDK integration of all 41 new C modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/ameba-rtos-d"
+          python3 scripts/audit_sdk.py "$sdk" --output native_logs/sdk_audit.json
+          python3 scripts/integrate_amebad_sdk.py --sdk "$sdk" --dry-run
+          python3 scripts/integrate_amebad_sdk.py --sdk "$sdk" --apply
+          grep -F 'gwir_runtime_owner.c' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          grep -F 'gwir_amebad_auth_server.c' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          grep -F 'gwir_sdk_auth_task.c' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          grep -F 'gwir_sdk_secure_start.c' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          grep -F 'gwir_sdk_bootstrap.c' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          grep -F 'gwir_ir_pipeline.c' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          grep -F 'gwir_sdk_boot_schedule();' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/main.c"
+          # CP33: on runner only, capture genuine vendor objects at the
+          # Makefile COPY_RAM_OBJS stage, before later SDK cleanup.
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          sdk=Path(os.environ["RUNNER_TEMP"])/"ameba-rtos-d"
+          make=sdk/"project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          code=make.read_text()
+          marker="all: CLEAN_OBJS CORE_TARGETS COPY_RAM_OBJS"
+          if code.count(marker)!=1 or "GWIR_CP38_SNAPSHOT" in code:
+              raise SystemExit("Unexpected vendor Makefile: refusing instrumentation")
+          code += ("\n.PHONY: GWIR_CP37_SNAPSHOT\n"
+                   "all: GWIR_CP37_SNAPSHOT\n"
+                   "GWIR_CP37_SNAPSHOT: COPY_RAM_OBJS\n"
+                   "\t@mkdir -p "+str(Path(os.environ["RUNNER_TEMP"])/"gwir-cp38-snapshot")+"\n"
+                   "\t@cp -f gwir_*.o "+str(Path(os.environ["RUNNER_TEMP"])/"gwir-cp38-snapshot")+"/\n")
+          make.write_text(code)
+          PY
+          python3 scripts/verify_native_km4_objects.py --sdk "$sdk" --phase preflight --output native_logs/km4_preflight.json
+      - name: Native Realtek KM0 (no flash)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          set +e
+          timeout 1200s make -C "$sdk/project_lp" all > native_logs/km0.log 2>&1
+          rc=$?
+          set -e
+          printf 'KM0_CP38_EXIT=%s\n' "$rc" | tee -a native_logs/RESULTS.txt
+          if [ "$rc" -ne 0 ]; then tail -n 80 native_logs/km0.log; fi
+          exit "$rc"
+      - name: Native Realtek KM4 build and 41 fresh ARM objects (no flash)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          touch native_logs/km4.start
+          set +e
+          timeout 1500s make -C "$sdk/project_hp" all > native_logs/km4.log 2>&1
+          rc=$?
+          set -e
+          printf 'KM4_CP38_EXIT=%s\n' "$rc" | tee -a native_logs/RESULTS.txt
+          if [ "$rc" -ne 0 ]; then tail -n 140 native_logs/km4.log; exit "$rc"; fi
+          # CP37_PATH_PROBE: show where vendor Make leaves real .o files,
+          # WITHOUT weakening the strict postbuild gate or uploading binaries.
+          src_dir="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp"
+          ram_dir="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk/build/ram"
+          {
+            printf 'PROBE_SOURCE_DIR=%s\\n' "$src_dir"
+            printf 'PROBE_RAM_DIR=%s\\n' "$ram_dir"
+            for dir in "$src_dir" "$ram_dir"; do
+              printf 'DIRECTORY=%s\\n' "$dir"
+              test -d "$dir" && find "$dir" -maxdepth 1 -name 'gwir_*.o' -printf '%f %s bytes\\n' | sort || :
+            done
+            for name in gwir_apconfig_button.o gwir_runtime_owner.o gwir_engine.o; do
+              for dir in "$src_dir" "$ram_dir"; do
+                test -f "$dir/$name" && printf 'PRESENT=%s/%s\\n' "$dir" "$name" || printf 'MISSING=%s/%s\\n' "$dir" "$name"
+              done
+            done
+          } > native_logs/object_paths.txt
+          tail -n 16 native_logs/object_paths.txt
+          # Fail if a single object was not captured at actual vendor make time.
+          snapshot="$RUNNER_TEMP/gwir-cp38-snapshot"
+          src_dir="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp"
+          shopt -s nullglob
+          objects=("$snapshot"/gwir_*.o)
+          test "${#objects[@]}" -eq 41 || { echo "Expected 41 native snapshot objects, got ${#objects[@]}"; exit 43; }
+          cp -p "${objects[@]}" "$src_dir/"
+          find "$snapshot" -maxdepth 1 -name 'gwir_*.o' -printf '%f %s bytes\\n' | sort > native_logs/object_snapshot_inventory.txt
+          python3 scripts/verify_native_km4_objects.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --phase postbuild --build-start-file native_logs/km4.start --output native_logs/km4_objects.json
+          echo 'KM4_CP38_41_OBJECTS=PASS' | tee -a native_logs/RESULTS.txt
+      - name: Final-link functional reachability gate (fail closed; diagnostic)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_native_km4_link_map.py --sdk "$RUNNER_TEMP/ameba-rtos-d" --build-start-file native_logs/km4.start --output native_logs/km4_final_link.json
+          echo 'KM4_CP38_FINAL_LINK=PASS' | tee -a native_logs/RESULTS.txt
+      - name: Upload diagnostics only - no firmware images
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-cp38-native-diagnostics-no-flash
+          path: native_logs/
+          retention-days: 14
