@@ -4,6 +4,7 @@ on:
   push:
     branches: [review/gw006-image-artifacts]
     paths:
+      - '.github/workflows/gw006-native-image-build.yml'
       - '.github/workflows/gw006-cp38-native.yml'
       - 'source_bundles/GW006_CP38_SOURCE_DELTA_NO_FLASH.zip'
       - 'source_bundles/GW006_CP32_SOURCE_ONLY_NO_FLASH.zip'
