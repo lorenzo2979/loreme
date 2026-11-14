@@ -13,6 +13,7 @@
 #include <WiFi.h>
 #include <IRDevice.h>
 #include <FlashMemory.h>
+#include "src/gwir_engine.h" // actual shared C engine compiled under src/
 
 static constexpr unsigned int kTVButtons = 36u;
 static constexpr unsigned int kClimateButtons = 14u;
@@ -39,9 +40,31 @@ void gw006_amebad_link_only_probe(void) {
     Serial.print((unsigned long)(state + ip[0] + word));
 }
 
+/* Real GWIR v3 parser and IR engine exercised on-device, with no IR HW
+ * connected. Use a static object: the five-frame IR queue is too large
+ * for the limited FreeRTOS task stack. */
+static gwir_engine s_gwir_engine;
+static bool gw006_core_selftest(void) {
+    uint8_t request[GWIR_HEADER_SIZE], response[GWIR_HEADER_SIZE];
+    size_t request_len = 0u, response_len = 0u;
+    gwir_message decoded;
+    gwir_ir_hal disconnected = {};
+    gwir_engine_init(&s_gwir_engine, disconnected);
+    if (gwir_encode(request, sizeof(request), GWIR_PING, 1u,
+                    NULL, 0u, &request_len) != 0 ||
+        gwir_engine_process(&s_gwir_engine, request, request_len,
+                            response, sizeof(response), &response_len) != 0 ||
+        gwir_decode(response, response_len, &decoded) != 0)
+        return false;
+    return decoded.command == GWIR_PONG && decoded.sequence == 1u &&
+           decoded.payload_len == 0u;
+}
 void setup() {
     Serial.begin(115200);
     Serial.println("GW006 AMEBAD ARDUINO TOOLCHAIN PROBE ONLY - NOT A GW006 IMAGE");
+    Serial.println(gw006_core_selftest()
+                   ? "GW006 REAL C PROTOCOL + IR ENGINE PING PASS (NO IR HARDWARE)"
+                   : "GW006 REAL C PROTOCOL/IR ENGINE SELFTEST FAILED");
 }
 void loop() {
     delay(1000);
