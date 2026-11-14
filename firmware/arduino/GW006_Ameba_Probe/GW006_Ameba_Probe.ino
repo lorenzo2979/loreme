@@ -13,6 +13,11 @@
 #include <WiFi.h>
 #include <IRDevice.h>
 #include <FlashMemory.h>
+extern "C" {
+#include "flash_api.h"
+#include "objects.h"
+#include "device_lock.h"
+}
 #include "src/gw006_ameba_authenticated_tcp.h"
 #include "src/gw006_ameba_hmac.h"
 #include "src/gw006_ameba_runtime.h"
@@ -121,6 +126,88 @@ static bool gw006_crypto_selftest() {
     memset(key,0,sizeof(key));memset(digest,0,sizeof(digest));
     return ok;
 }
+/* Physical-UART diagnostic is deliberately independent of the GWAS network:
+ * it neither opens any network listener nor erases/programs flash. UART
+ * access requires a directly connected 3.3V serial adapter, not open WiFi.
+ * A board user may explicitly opt in to one low-power PA25 carrier test
+ * only AFTER removing the red LED and inspecting its residual circuitry. */
+static char serial_line[48];
+static uint8_t serial_used;
+static void gw006_serial_command(const char *line) {
+    if (!strcmp(line,"HELP")) {
+        Serial.println("GW006: HELP STATUS FLASHID PINS TXTEST-PA25-LED-REMOVED");
+        return;
+    }
+    if (!strcmp(line,"STATUS")) {
+        Serial.print("GW006_RTL8721CSM_TEST: RTOS_BOOTED; GWAS_RUNTIME=");
+        Serial.println(s_runtime.running() ? "ACTIVE" : "UNPROVISIONED");
+        Serial.println("FLASH_WRITES=OFF_WHEN_UNAPPROVED; CORE_IR=96x5");
+        return;
+    }
+    if (!strcmp(line,"PINS")) {
+        Serial.println("IR_TX: PA25 (Arduino AMB_D6); IR_RX: PA26 (AMB_D5)");
+        Serial.println("PB22: BLUE_WIFI_LED; PB23: APCONFIG_BUTTON");
+        return;
+    }
+    if (!strcmp(line,"FLASHID")) {
+        flash_t f = {};
+        uint8_t id[3] = {0};
+        device_mutex_lock(RT_DEV_LOCK_FLASH);
+        int rc=flash_read_id(&f,id,sizeof(id));
+        device_mutex_unlock(RT_DEV_LOCK_FLASH);
+        if (rc == -1) {
+            Serial.println("JEDEC_READ_ERROR");
+            return;
+        }
+        Serial.print("JEDEC=");
+        for (size_t i=0;i<sizeof(id);++i) {
+            if (id[i]<16u) Serial.print('0');
+            Serial.print(id[i],HEX);
+        }
+        Serial.println(id[2]==0x17u ? " CAPACITY=8MiB" : " CAPACITY=UNVERIFIED");
+        return;
+    }
+    if (!strcmp(line,"TXTEST-PA25-LED-REMOVED")) {
+        if (s_runtime.running()) {
+            Serial.println("TXTEST_REFUSED: AUTH_OWNER_ACTIVE");
+            return;
+        }
+        const unsigned int sample[4] = {900u,450u,560u,560u};
+        Serial.println("TXTEST: PA25, 38kHz, one 4-pulse frame; no flash write");
+        IR.begin((uint8_t)IR_RX, (uint8_t)IR_TX, IR_MODE_TX, 38000u);
+        IR.send(sample,4u);
+        IR.end();
+        Serial.println("TXTEST_LIBRARY_RETURNED; VERIFY_CARRIER_WITH_RECEIVER");
+        return;
+    }
+    Serial.println("UNKNOWN_COMMAND; TYPE HELP");
+}
+static void gw006_poll_serial(void) {
+    uint8_t n=0;
+    while (Serial.available() > 0 && n++ < 48u) {
+        int c=Serial.read();
+        if (c == '\r' || c == '\n') {
+            if (serial_used) {
+                serial_line[serial_used]=0;
+                gw006_serial_command(serial_line);
+                memset(serial_line,0,sizeof(serial_line));
+                serial_used=0;
+            }
+            continue;
+        }
+        if (c < 32 || c > 126) {
+            serial_used=0;
+            Serial.println("BAD_UART_COMMAND");
+            continue;
+        }
+        if (serial_used + 1u >= sizeof(serial_line)) {
+            serial_used=0;
+            Serial.println("UART_LINE_TOO_LONG");
+            continue;
+        }
+        serial_line[serial_used++]=(char)c;
+    }
+}
 void setup() {
     Serial.begin(115200);
     Serial.println("GW006 AMEBAD ARDUINO FAMILY BUILD - WBRG1 HARDWARE NOT YET SUPPORTED");
@@ -145,8 +232,10 @@ void setup() {
         Serial.println("GW006 UNPROVISIONED: IR/FLASH/WIFI NOT ACTIVATED");
     }
     memset(&config, 0, sizeof(config));
+    Serial.println("GW006 UART BENCH: enter HELP for read-only diagnostics");
 }
 void loop() {
     s_runtime.poll();
+    gw006_poll_serial();
     delay(2);
 }
