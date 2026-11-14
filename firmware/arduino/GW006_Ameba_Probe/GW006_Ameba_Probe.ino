@@ -131,11 +131,69 @@ static bool gw006_crypto_selftest() {
  * access requires a directly connected 3.3V serial adapter, not open WiFi.
  * A board user may explicitly opt in to one low-power PA25 carrier test
  * only AFTER removing the red LED and inspecting its residual circuitry. */
-static char serial_line[48];
+static char serial_line[96];
+static char pending_ssid[33];
 static uint8_t serial_used;
+static uint8_t wifi_stage; /* 0 command, 1 SSID, 2 password */
 static void gw006_serial_command(const char *line) {
+    if (wifi_stage == 1u) {
+        size_t n=strlen(line);
+        if (!n || n>32u) {
+            wifi_stage=0u;
+            Serial.println("WIFI_REJECTED: SSID 1..32");
+            return;
+        }
+        memcpy(pending_ssid,line,n+1u);
+        wifi_stage=2u;
+        Serial.println("WIFI_PASSWORD? (8..63 chars, blank=open network)");
+        return;
+    }
+    if (wifi_stage == 2u) {
+        wifi_stage=0u;
+        size_t n=strlen(line);
+        if ((n!=0u && n<8u) || n>63u) {
+            memset(pending_ssid,0,sizeof(pending_ssid));
+            Serial.println("WIFI_REJECTED: password length");
+            return;
+        }
+        char pass[65]={0};
+        memcpy(pass,line,n);
+        /* Only physical UART provisioning, no key or password stored in
+         * firmware and no plaintext management listener on the LAN. */
+        Serial.println("WIFI_CONNECTING");
+        if (n) WiFi.begin(pending_ssid,pass);
+        else WiFi.begin(pending_ssid);
+        memset(pass,0,sizeof(pass));
+        memset(pending_ssid,0,sizeof(pending_ssid));
+        uint32_t start=millis();
+        while (WiFi.status()!=WL_CONNECTED &&
+               (uint32_t)(millis()-start)<12000u) delay(50);
+        if (WiFi.status()==WL_CONNECTED) {
+            Serial.print("WIFI_CONNECTED IP=");
+            Serial.println(WiFi.localIP());
+        } else Serial.println("WIFI_CONNECT_FAILED");
+        return;
+    }
     if (!strcmp(line,"HELP")) {
-        Serial.println("GW006: HELP STATUS FLASHID PINS TXTEST-PA25-LED-REMOVED");
+        Serial.println("GW006: HELP STATUS FLASHID PINS WIFI WIFISTATUS TXTEST-PA25-LED-REMOVED");
+        return;
+    }
+    if (!strcmp(line,"WIFI")) {
+        if (s_runtime.running()) {
+            Serial.println("WIFI_REFUSED: AUTH_OWNER_ACTIVE");
+            return;
+        }
+        wifi_stage=1u;
+        Serial.println("WIFI_SSID?");
+        return;
+    }
+    if (!strcmp(line,"WIFISTATUS")) {
+        Serial.print("WIFI_STATUS=");
+        Serial.println(WiFi.status()==WL_CONNECTED ? "CONNECTED" : "DISCONNECTED");
+        if (WiFi.status()==WL_CONNECTED) {
+            Serial.print("IP=");
+            Serial.println(WiFi.localIP());
+        }
         return;
     }
     if (!strcmp(line,"STATUS")) {
@@ -233,6 +291,7 @@ void setup() {
     }
     memset(&config, 0, sizeof(config));
     Serial.println("GW006 UART BENCH: enter HELP for read-only diagnostics");
+    Serial.println("WIFI is session-only on UART; no credentials saved to NOR");
 }
 void loop() {
     s_runtime.poll();
