@@ -131,6 +131,20 @@ jobs:
           done
           sha256sum firmware/realtek/gwir_amebad_vendor_bus.c
           echo "GW006_PA25_PA26_DRIVER_MOCK_TESTS=PASS; HARDWARE_NOT_TESTED"
+      - name: Regenerate exact post-patch source manifest after IR GPIO adapter update
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.verify_release_sources import records
+          path=Path('docs/CP21_SOURCE_MANIFEST.json')
+          d=json.loads(path.read_text())
+          d['files']=records(Path.cwd())
+          path.write_text(json.dumps(d,indent=2)+'\n')
+          PY
+          python3 scripts/verify_release_sources.py
       - name: Preserve exact audited source tree for offline code review (NO FLASH)
         uses: actions/upload-artifact@v4
         with:
@@ -203,15 +217,25 @@ jobs:
           set -euo pipefail
           mkdir -p native-link-inspection
           sdk="$RUNNER_TEMP/ameba-rtos-d"
+          # A failed final-link audit MUST fail the job; preserve diagnostics
+          # and map/ELF artifact for inspection even when link gate rejects.
+          set +e
           python3 scripts/verify_native_km4_link_map.py --sdk "$sdk" \
              --build-start-file "$RUNNER_TEMP/gwir_native_started" \
              --output native-link-inspection/FINAL_LINK_REPORT.json \
-             > native-link-inspection/FINAL_LINK_LOG.txt 2>&1 || \
-              echo 'LINK_GATE_NOT_PASSED=SEE_REPORT' | tee -a native-link-inspection/FINAL_LINK_LOG.txt
+             > native-link-inspection/FINAL_LINK_LOG.txt 2>&1
+          gate_status=$?
+          set -e
           image="$sdk/project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk/image"
           cp "$image/text_image2_ns.map" native-link-inspection/
           cp "$image/target_img2.axf" native-link-inspection/
           (cd native-link-inspection && sha256sum text_image2_ns.map target_img2.axf > SHA256SUMS.txt)
+          if [ "$gate_status" -ne 0 ]; then
+            echo "GW006_FINAL_LINK_GATE=FAIL (not an installable firmware)" | tee native-link-inspection/FINAL_LINK_STATUS.txt
+            cat native-link-inspection/FINAL_LINK_LOG.txt
+            exit "$gate_status"
+          fi
+          echo 'GW006_FINAL_LINK_GATE=PASS (does not certify hardware)' | tee native-link-inspection/FINAL_LINK_STATUS.txt
       - name: Upload Realtek final-link inspection (DO NOT INSTALL)
         if: always()
         uses: actions/upload-artifact@v4
