@@ -1,0 +1,122 @@
+name: GW006 native Realtek HAL build evidence (NON INSTALLARE)
+on:
+  push:
+    branches: [review/gw006-realtek-flash-hal]
+    paths:
+      - '.github/workflows/gw006-realtek-flash-hal.yml'
+      - 'source_bundles/GW006_WBRG1_STORAGE_PORT_SOURCE_ONLY.zip'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check exact source release and hardware safety defaults
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "1a97c5f571c85224ea5df923bbf114addb3acea8bf1b65cbf35f3d653c168044  source_bundles/GW006_WBRG1_STORAGE_PORT_SOURCE_ONLY.zip" | sha256sum -c -
+          python3 - <<'PY'
+          from pathlib import Path,PurePosixPath
+          from zipfile import ZipFile
+          import stat
+          f=Path("source_bundles/GW006_WBRG1_STORAGE_PORT_SOURCE_ONLY.zip")
+          with ZipFile(f) as z:
+              names=set()
+              for i in z.infolist():
+                  p=PurePosixPath(i.filename)
+                  if i.is_dir() or p.is_absolute() or '..' in p.parts or i.filename in names or stat.S_ISLNK(i.external_attr >> 16):
+                      raise SystemExit("Unsafe archive member")
+                  names.add(i.filename)
+              z.extractall(".")
+          h=Path("firmware/realtek/gwir_wbrg1_flash_port.h").read_text()
+          if "#define GWIR_WBRG1_STORAGE_APPROVED 0" not in h:
+              raise SystemExit("Danger: default storage authorization not disabled")
+          if "gwir_sdk_boot_register(" not in Path("firmware/sdk/gwir_sdk_bootstrap.c").read_text():
+              raise SystemExit("Expected boot registration API missing")
+          print("STORAGE_DEFAULT_DENY=PASS")
+          PY
+          python3 scripts/verify_release_sources.py
+          python3 tests/test_source_manifest.py
+          python3 tests/test_native_km4_objects.py
+          python3 tests/test_native_km4_link_map.py
+      - name: Host NOR HAL and SDK wiring tests (no hardware)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq make bc python3 git curl wget unzip bzip2 lib32z1 lib32stdc++6 libssl-dev
+          make test-wbrg1-flash-port test-sdk-integration
+      - name: Obtain official SHA-pinned AmebaD SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_sha=7569200fb8304daa61a9f09ccf439ada38d6de2e
+          git clone --depth 1 https://github.com/Ameba-AIoT/ameba-rtos-d.git "$RUNNER_TEMP/ameba-rtos-d"
+          if [ "$(git -C "$RUNNER_TEMP/ameba-rtos-d" rev-parse HEAD)" != "$sdk_sha" ]; then
+            git -C "$RUNNER_TEMP/ameba-rtos-d" fetch --depth 1 origin "$sdk_sha"
+            git -C "$RUNNER_TEMP/ameba-rtos-d" checkout --detach FETCH_HEAD
+          fi
+          test "$(git -C "$RUNNER_TEMP/ameba-rtos-d" rev-parse HEAD)" = "$sdk_sha"
+      - name: Integrate 42 firmware C sources into the actual vendor SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/ameba-rtos-d"
+          python3 scripts/integrate_amebad_sdk.py --sdk "$sdk" --dry-run
+          python3 scripts/integrate_amebad_sdk.py --sdk "$sdk" --apply
+          grep -F 'gwir_wbrg1_flash_port.c' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          grep -F 'gwir_sdk_boot_schedule();' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/main.c"
+      - name: Native KM0 build
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          timeout 1200 make -C "$sdk/project_lp" all > km0.log 2>&1 || { tail -100 km0.log; exit 1; }
+          echo "KM0_NATIVE_BUILD=PASS"
+      - name: Native KM4 build with the new Flash HAL
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          timeout 1500 make -C "$sdk/project_hp" all > km4.log 2>&1 || { tail -140 km4.log; exit 1; }
+          echo "KM4_NATIVE_BUILD=PASS"
+      - name: Capture VENDOR-built firmware images as NON-INSTALLABLE proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p native-image-evidence
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,json,hashlib,shutil
+          root=Path(os.environ['RUNNER_TEMP'])/'ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE'
+          out=Path('native-image-evidence')
+          samples=[('project_lp','km0_boot_all.bin'),('project_hp','km4_boot_all.bin'),('project_hp','km0_km4_image2.bin')]
+          report={'verified_sdk_sha':'7569200fb8304daa61a9f09ccf439ada38d6de2e',
+                  'source_release_sha256':'1a97c5f571c85224ea5df923bbf114addb3acea8bf1b65cbf35f3d653c168044',
+                  'installed_on_hardware':False,'safe_to_flash':False,
+                  'known_blockers':['Boot key/nonce provider absent','No real board IR authorization',
+                                    'WBRG1 flash partition proposal not validated on user device',
+                                    'Persistent journal not runtime-bound to authenticated commands',
+                                    'No hardware boot test'],'images':[]}
+          for core,name in samples:
+              p=root/core/'asdk/image'/name
+              if not p.is_file() or p.stat().st_size<4096:
+                  raise SystemExit('Missing/too-small vendor image: '+str(p))
+              b=p.read_bytes()
+              (out/name).write_bytes(b)
+              report['images'].append({'from':core,'file':name,'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest()})
+          (out/'BUILD_EVIDENCE.json').write_text(json.dumps(report,indent=2)+'\n')
+          (out/'NON_INSTALLARE.txt').write_text('SDK NATIVO, NON APPROVATO PER INSTALLAZIONE SU GW006.\nNessun flash. Driver flash disattivato. Nessun collaudo hardware.\n')
+          print(json.dumps(report,indent=2))
+          PY
+      - name: Upload images and report - NEVER FLASH
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-realtek-built-images-EXPERIMENTAL-DO-NOT-FLASH
+          path: native-image-evidence/
+          retention-days: 14
