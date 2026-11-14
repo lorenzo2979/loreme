@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 from zipfile import ZipFile
+from apply_gw006_storage_abort import apply as apply_store_abort
 
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE = ROOT / "source_bundles/GW006_WBRG1_STORAGE_PORT_SOURCE_ONLY.zip"
@@ -23,7 +24,6 @@ COMPONENTS = (
 PATCHES = (
     "gw006_authenticated_storage_protocol.patch",
     "gw006_authenticated_store_implementation.patch",
-    "gw006_authenticated_storage_abort.patch",
 )
 
 
@@ -53,6 +53,7 @@ def sync() -> None:
                 if result.returncode:
                     raise SystemExit(f"Patch {patch_name} check={check} failed: "
                                      f"{result.stdout} {result.stderr}")
+        apply_store_abort(work / "firmware/core")
         DEST.mkdir(parents=True, exist_ok=True)
         for module in COMPONENTS:
             for suffix in (".c", ".h"):
