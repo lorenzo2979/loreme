@@ -1,0 +1,161 @@
+--- a/tests/test_sdk_bootstrap.c
++++ b/tests/test_sdk_bootstrap.c
+@@ -22,7 +22,13 @@
+ static uint8_t scratch[GWIR_MAX_MESSAGE];
+ static uint8_t response[GWIR_AUTH_MAX_PACKET];
+ static gwir_sdk_secure_provider provider={trust_check,load,nonce,fresh,deliver,NULL};
+-static gwir_sdk_boot_config config={&provider,&owner,&engine,NULL,hmac,NULL,scratch,sizeof(scratch),response,sizeof(response),32444,NULL,NULL};
++static gwir_sdk_boot_config config = {
++    .provider=&provider, .owner=&owner, .engine=&engine, .saved=NULL,
++    .hmac=hmac, .crypto_ctx=NULL, .scratch=scratch,
++    .scratch_capacity=sizeof(scratch), .response=response,
++    .response_capacity=sizeof(response), .port=32444,
++    .ir_pipeline=NULL, .ir_config=NULL
++};
+ 
+ int xTaskCreate(void (*fn)(void *),const char *name,unsigned stack,void *arg,unsigned prio,void *handle)
+ {
+@@ -36,22 +42,94 @@
+ void vTaskDelete(void *x) { assert(x==NULL);delete_count++; }
+ int gwir_sdk_auth_network_ready(void) { polls++;return connected_after>=0 && (int)polls>connected_after; }
+ /* The host bootstrap exercises linkage without enabling any physical IR. */
+-static int ir_init_calls;
++static int ir_init_calls, ir_stop_calls, ir_board_mock, storage_mount_calls;
++static int storage_fail, storage_init_calls, storage_enable_calls;
++static gwir_ir_pipeline ir_pipeline;
++static gwir_fj_store storage;
++static gwir_saved_play_service saved_storage;
++static uint32_t tx_scratch[GWIR_MAX_PULSES_PER_FRAME];
++static uint8_t upload_buffer[GWIR_GWCD_MAX_SIZE];
++static int read_nor(void *c, uint32_t off, void *dst, size_t n) {
++    (void)c; (void)off; (void)dst; (void)n; return 0;
++}
++static int write_nor(void *c, uint32_t off, const void *src, size_t n) {
++    (void)c; (void)off; (void)src; (void)n; return 0;
++}
++static int erase_nor(void *c, uint32_t off) { (void)c; (void)off; return 0; }
++static const gwir_fj_io storage_io = {
++    .read=read_nor, .program=write_nor, .erase_sector=erase_nor,
++    .region_size=0x00500000u
++};
++static int board_test_ready(void *ctx) { (void)ctx; return 1; }
++static int test_ir_send(void *ctx, uint32_t carrier, uint16_t duty,
++                        const uint32_t *durations, uint16_t count, uint32_t gap) {
++    (void)ctx;(void)carrier;(void)duty;(void)durations;(void)count;(void)gap;
++    return 0;
++}
++/* The boot test explicitly stubs NOR IO, never touches any device. */
++uint32_t gwir_fj_worst_case_rewrite_bytes(void) { return 4378624u; }
++int gwir_fj_open(gwir_fj_store *store, const gwir_fj_io *io)
++{
++    storage_mount_calls++;
++    if (store != &storage || io != &storage_io || storage_fail) return -1;
++    store->ready = 1;
++    return 0; /* Host fake NOR ONLY; no physical flash touched. */
++}
++int gwir_saved_play_init(gwir_saved_play_service *service,
++                         gwir_fj_store *store, const gwir_fj_play_ops *ir,
++                         uint32_t *pulse_scratch, size_t pulse_capacity)
++{
++    storage_init_calls++;
++    if (service != &saved_storage || store != &storage || !store->ready ||
++        !ir || !ir->send_frame || !ir->board_ir_ready ||
++        ir->board_ir_ready(ir->ctx) != 1 ||
++        pulse_scratch != tx_scratch || pulse_capacity != GWIR_MAX_PULSES_PER_FRAME)
++        return -1;
++    service->store = store;
++    service->ir = ir;
++    return 0;
++}
++int gwir_saved_play_enable_upload(gwir_saved_play_service *service,
++                                 uint8_t *upload_scratch, size_t upload_capacity)
++{
++    storage_enable_calls++;
++    if (service != &saved_storage || service->store != &storage ||
++        upload_scratch != upload_buffer || upload_capacity != sizeof(upload_buffer))
++        return -1;
++    service->upload_scratch = upload_scratch;
++    return 0;
++}
+ int gwir_ir_pipeline_init(gwir_ir_pipeline *pipe,gwir_engine *eng,
+                           const gwir_ir_pipeline_config *c)
+ {
+-    (void)pipe; (void)eng; (void)c;
++    (void)c;
+     ++ir_init_calls;
+-    return -1; /* No verified hardware may pass the host mock. */
+-}
+-int gwir_sdk_auth_task_bind_ir_pipeline(gwir_ir_pipeline *p) { (void)p; return -1; }
+-int gwir_ir_pipeline_stop(gwir_ir_pipeline *p) { (void)p; return 0; }
++    if (!ir_board_mock) return -1;
++    assert(pipe == &ir_pipeline && eng == &engine);
++    pipe->ready = 1;
++    pipe->engine = eng;
++    pipe->bus.ops.board_ir_ready = board_test_ready;
++    eng->hal.tx = test_ir_send;
++    return 0; /* Host-only fake, no Realtek registers touched. */
++}
++int gwir_sdk_auth_task_bind_ir_pipeline(gwir_ir_pipeline *p) {
++    if (!p) return 0;
++    return (p == &ir_pipeline && p->ready && ir_board_mock) ? 0 : -1;
++}
++int gwir_ir_pipeline_stop(gwir_ir_pipeline *p) {
++    assert(p == &ir_pipeline);
++    ++ir_stop_calls;
++    p->ready = 0;
++    return 0;
++}
+ int gwir_sdk_secure_start(const gwir_sdk_secure_provider *p,gwir_runtime_owner *o,
+                          gwir_engine *e,gwir_saved_play_service *saved,
+                          gwir_auth_hmac_fn fn,void *ctx,uint8_t *s,size_t sc,
+                          uint8_t *r,size_t rc,uint16_t port)
+ {
+-    (void)saved;(void)ctx;
++    (void)ctx;
++    if (ir_board_mock) assert(saved == &saved_storage);
++    else assert(saved == NULL);
+     assert(p==&provider && o==&owner && e==&engine && fn==hmac);
+     assert(s==scratch && sc==sizeof(scratch));
+     assert(r==response && rc==sizeof(response) && port==32444u);
+@@ -73,6 +151,10 @@
+         assert(gwir_sdk_boot_register(&bad)==-1);
+         bad=config; bad.scratch_capacity=1;
+         assert(gwir_sdk_boot_register(&bad)==-1);
++        bad=config; bad.saved=(gwir_saved_play_service *)&engine;
++        assert(gwir_sdk_boot_register(&bad)==-1); /* No mount/IR pipeline. */
++        bad=config; bad.store=(gwir_fj_store *)&engine;
++        assert(gwir_sdk_boot_register(&bad)==-1); /* Stray store forbidden. */
+         assert(!task_count && !starts);
+         bad=config; bad.ir_pipeline=(gwir_ir_pipeline *)&owner;
+         assert(gwir_sdk_boot_register(&bad)==-1);
+@@ -92,6 +174,31 @@
+         assert(gwir_sdk_boot_schedule()==0);
+         pending_task(NULL);
+         assert(ir_init_calls==1 && !starts && delete_count==1);
++    } else if (!strcmp(argv[1],"storage-ready") ||
++               !strcmp(argv[1],"storage-mount-error")) {
++        ir_board_mock = 1;
++        config.ir_pipeline = &ir_pipeline;
++        config.ir_config = (const gwir_ir_pipeline_config *)&engine;
++        config.saved = &saved_storage;
++        config.store = &storage;
++        config.store_io = &storage_io;
++        config.pulse_scratch = tx_scratch;
++        config.pulse_capacity = GWIR_MAX_PULSES_PER_FRAME;
++        config.upload_scratch = upload_buffer;
++        config.upload_capacity = sizeof(upload_buffer);
++        storage_fail = !strcmp(argv[1],"storage-mount-error");
++        connected_after = 0;
++        assert(gwir_sdk_boot_register(&config) == 0);
++        assert(gwir_sdk_boot_schedule() == 0);
++        pending_task(NULL);
++        assert(storage_mount_calls == 1);
++        assert(ir_stop_calls == 1);
++        if (storage_fail) {
++            assert(starts == 0 && storage_init_calls == 0 && storage_enable_calls == 0);
++        } else {
++            assert(starts == 1 && storage_init_calls == 1 && storage_enable_calls == 1);
++        }
++        assert(delete_count == 1);
+     } else if (!strcmp(argv[1],"offline")) {
+         connected_after=-1;
