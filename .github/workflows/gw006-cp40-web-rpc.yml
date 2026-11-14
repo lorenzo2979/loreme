@@ -6,6 +6,8 @@ on:
       - '.github/workflows/gw006-cp40-web-rpc.yml'
       - 'firmware/core/gwir_web_rpc.*'
       - 'tests/test_gwir_web_rpc.c'
+      - 'firmware/core/gwir_web_http_post.*'
+      - 'tests/test_gwir_web_http_post.c'
   workflow_dispatch:
 permissions:
   contents: read
@@ -51,4 +53,10 @@ jobs:
             tests/test_gwir_web_rpc.c \
             -o build/gwir_web_rpc_host_test
           ./build/gwir_web_rpc_host_test
-          echo 'WEB_RPC_HOST_GATE=PASS; NOT AN INSTALLABLE IMAGE'
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Ifirmware/core -Ibuild/cp40-base/firmware/core \
+            firmware/core/gwir_web_http_post.c \
+            tests/test_gwir_web_http_post.c \
+            -o build/gwir_web_http_header_test
+          ./build/gwir_web_http_header_test
+          echo 'WEB_RPC_AND_STRICT_HTTP_HEADER_HOST_GATE=PASS; NOT AN INSTALLABLE IMAGE'
