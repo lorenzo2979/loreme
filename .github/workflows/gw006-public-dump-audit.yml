@@ -1,0 +1,112 @@
+name: GW006 WBRG1 public flash comparison (READ ONLY)
+on:
+  push:
+    branches: [review/gw006-public-dump-audit]
+    paths: ['.github/workflows/gw006-public-dump-audit.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-dump-audit:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Verify four public 8MiB images and report sector statistics ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          python3 - <<'PY'
+          import hashlib, json, urllib.request, urllib.parse
+          from pathlib import Path
+
+          repo='https://raw.githubusercontent.com/openshwprojects/FlashDumps/main/'
+          samples=[
+            ('A','Tuya-Gateway-20250219-(8721csm_bt_zg_gw)_keym557nqw3p8p7m_tcd2siztvrth66he_WBRG1_1.7.2-p.kaczmarek2.bin','aaf9b4a0072c7203c705ad66a6000a709e1549c8'),
+            ('B','Tuya_GW018-DM_WiFi+BT+ZG_Gateway_(schemaID-euwqr8)_keym557nqw3p8p7m_dmmv7eacvbyyg9gl_WBRG1_1.6.2-pvvx.bin','bcc5956c302c4fae7df214ead8a4286ff1d5c481'),
+            ('C','Tuya_Maginon_WT-2G_ZB_TRV_(schemaID- fty1s0)_keym557nqw3p8p7m_jqhfckegicggcmxg_WBRG1_1.7.2-maxrower.bin','8de00cba53160207e50d537673ba0a5dea3d1541'),
+            ('D','Tuya_TYGWZB-01N_WiFi+BT+ZG_Gateway_(8721csm_bt_zg_gw)_keym557nqw3p8p7m_wokjxeds5avjr2l3_WBRG1_1.8.2-insmod.bin','73e55af4cd58a88ea81b7c75d77cb3386ce29afa')
+          ]
+          size=8388608;sector=4096;empty=b'\xff'*sector
+          raw={};meta=[]
+          for label,filename,expected_sha in samples:
+              link=repo+'IoT/RTL8721CSM/'+urllib.parse.quote(filename)
+              req=urllib.request.Request(link,headers={'User-Agent':'GW006-offline-public-dump-verification'})
+              with urllib.request.urlopen(req,timeout=100) as resp: data=resp.read(size+1)
+              if len(data)!=size:raise SystemExit('Reference '+label+' has incorrect size: '+str(len(data)))
+              sha=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\x00'+data).hexdigest()
+              if sha!=expected_sha:raise SystemExit('Reference '+label+' Git SHA mismatch')
+              raw[label]=data
+              meta.append({'sample':label,'size':len(data),'git_blob_sha1':sha,
+                           'sha256':hashlib.sha256(data).hexdigest(),
+                           'erased_ff_4k_sectors':sum(data[i:i+sector]==empty for i in range(0,size,sector))})
+          labels=list(raw)
+          hashes={k:[hashlib.sha256(v[i:i+sector]).digest() for i in range(0,size,sector)] for k,v in raw.items()}
+          n=size//sector
+          eq=[all(hashes[labels[0]][i]==hashes[k][i] for k in labels[1:]) for i in range(n)]
+          eq_non_ff=[eq[i] and raw[labels[0]][i*sector:(i+1)*sector]!=empty for i in range(n)]
+          def runs(flags):
+              out=[];start=None
+              for i,flag in enumerate(flags+[False]):
+                  if flag and start is None: start=i
+                  elif not flag and start is not None:
+                      out.append({'begin':hex(start*sector),'end_exclusive':hex(i*sector),'bytes':(i-start)*sector})
+                      start=None
+              return out
+          per64=[]
+          for ofs in range(0,size,65536):
+              st=ofs//sector
+              per64.append({'start':hex(ofs),
+                            'identical_sectors_4k':sum(eq[st:st+16]),
+                            'identical_programmed_sectors_4k':sum(eq_non_ff[st:st+16]),
+                            'erased_sectors_by_sample':{k:sum(raw[k][s*sector:(s+1)*sector]==empty for s in range(st,st+16)) for k in labels}})
+          probes={}
+          for k,data in raw.items():
+              probes[k]=[{'offset':hex(ofs),'all_ff':data[ofs:ofs+sector]==empty,
+                          'sector_sha256':hashlib.sha256(data[ofs:ofs+sector]).hexdigest()}
+                         for ofs in (0,0x1000,0x6000,0x106000,0x206000,0x700000)]
+          report={
+              'status':'PUBLIC FLASH RESEARCH ONLY; NO GW006 VALIDATION',
+              'source':'https://github.com/openshwprojects/FlashDumps/tree/main/IoT/RTL8721CSM',
+              'limitations':['None is proven same board revision as user GW006',
+                             'Do not use a public device dump to restore a private device',
+                             'Erased sectors in public reference do not establish free space in user GW006',
+                             'No private credentials or raw dump uploaded'],
+              'samples':meta,
+              'identical_4k_sector_count_all_four':sum(eq),
+              'identical_non_erased_4k_sector_count_all_four':sum(eq_non_ff),
+              'identical_non_erased_ranges':runs(eq_non_ff),
+              'identical_ranges_including_erased':runs(eq),
+              'per_64k':per64,'probes':probes,
+              'gw006_specific_bootloader': 'NOT VERIFIED',
+              'gw006_specific_flash_partitions':'NOT VERIFIED',
+              'installation_authorized':False
+          }
+          Path('reports/WBRG1_PUBLIC_FLASH_COMPARISON.json').write_text(json.dumps(report,indent=2)+'\n')
+          lines=['# WBRG1 — analisi di quattro dump pubblici (sola lettura)',
+                 'Nessuna immagine flash completa o credenziale inclusa in questo rapporto.',
+                 'NON dimostra la disposizione della memoria della GW006 specifica.',
+                 '',
+                 'Campione | Dimensione byte | Settori da 4KiB cancellati (FF)',
+                 '--- | ---: | ---:']
+          for m in meta:lines.append(m['sample']+' | '+str(m['size'])+' | '+str(m['erased_ff_4k_sectors']))
+          lines += ['','Settori comuni da 4 KiB: '+str(sum(eq))+' su '+str(n),
+                    'Settori comuni NON vuoti da 4 KiB: '+str(sum(eq_non_ff)),
+                    '','## Aree non vuote identiche in tutti e quattro i dump']
+          for span in runs(eq_non_ff)[:50]:lines.append('- '+span['begin']+' - '+span['end_exclusive']+' ('+str(span['bytes'])+' byte)')
+          lines += ['','**Non usare questi intervalli per scrivere o cancellare la GW006.**',
+                    'Per il flash reale rimangono indispensabili mappa specifica, backup e recupero validati.']
+          Path('reports/WBRG1_PUBLIC_FLASH_COMPARISON.md').write_text('\n'.join(lines)+'\n')
+          print('VERIFIED_PUBLIC_FULL_FLASH_DUMPS=4')
+          print('BYTES_PER_DUMP='+str(size))
+          print('IDENTICAL_PROGRAMMED_4K_SECTORS='+str(sum(eq_non_ff)))
+          print('NO RAW DUMPS OR DEVICE SECRETS UPLOADED')
+          PY
+      - name: Upload sanitized evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-wbrg1-public-dump-audit-JSON-MD-only
+          path: reports/
+          if-no-files-found: ignore
+          retention-days: 14
