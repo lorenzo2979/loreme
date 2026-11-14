@@ -43,6 +43,16 @@ jobs:
           python3 tests/test_source_manifest.py
           python3 tests/test_native_km4_objects.py
           python3 tests/test_native_km4_link_map.py
+      - name: Preserve exact audited source tree for offline code review (NO FLASH)
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-extracted-source-review-NO-FLASH
+          path: |
+            firmware/
+            scripts/
+            tests/
+            Makefile
+          retention-days: 14
       - name: Host NOR HAL and SDK wiring tests (no hardware)
         shell: bash
         run: |
