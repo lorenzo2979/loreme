@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include "gwir_sdk_bootstrap.h"
+#include "gwir_amebad_board_pins.h"
 static gwir_sdk_boot_config cfg;
 static unsigned calls;
 static int accept;
@@ -28,8 +29,17 @@ int main(void) {
     cfg.pulse_scratch=(void*)&cfg;cfg.upload_scratch=(void*)&cfg;
     assert(gwir_sdk_board_prepare()==-2 && !calls);
     io.read=rd;io.program=wr;io.erase_sector=er;
+    /* Execute actual GW006 pin-profile metadata, not a mock of validation.
+     * A passing profile alone does not authorize the red-LED electrical net. */
+    {
+        gwir_board_pins pins = gwir_board_pins_candidate();
+        assert(gwir_board_pins_validate(&pins) == 0);
+        assert(pins.ir_tx != pins.ir_rx && pins.ir_rx != pins.ap_button);
+        pins.red_led = pins.ir_tx;
+        assert(gwir_board_pins_validate(&pins) != 0);
+    }
     accept=-77;
     assert(gwir_sdk_board_prepare()==-77 && calls==1 && ap_commissions==3u);
-    puts("PASS GW006 startup calls physical AP service and rejects no-storage/no-IR products");
+    puts("PASS GW006 KM4: AP commissioning, safe IR pin metadata and storage-required boot; NO HARDWARE");
     return 0;
 }
