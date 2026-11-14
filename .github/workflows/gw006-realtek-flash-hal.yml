@@ -294,7 +294,9 @@ jobs:
           cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
             -ffunction-sections -fdata-sections '-DDBG_8195A(...)=' \
             -Itests/stubs -Ifirmware/sdk -Ifirmware/core -Ifirmware/realtek \
-            firmware/sdk/gwir_sdk_diag.c tests/test_gw006_product_boot.c \
+            firmware/sdk/gwir_sdk_diag.c \
+            firmware/realtek/gwir_amebad_board_pins.c \
+            tests/test_gw006_product_boot.c \
             -Wl,--gc-sections -o build/test_gw006_product_boot
           ./build/test_gw006_product_boot
           python3 tests/test_source_manifest.py
