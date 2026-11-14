@@ -237,7 +237,8 @@ static void gw006_serial_command(const char *line) {
         uint8_t address=0u,command=0u;
         IR.beginNEC((uint8_t)IR_RX, (uint8_t)IR_TX, IR_MODE_RX);
         bool received=IR.recvNEC(address,command,4000u)!=0u;
-        IR.end();
+        /* recvNEC() already stops RX and unregisters its IRQ. Do not invoke
+         * IR.end(), which uses mismatched board index vs chip pin identity. */
         if (received) {
             Serial.print("RXTEST_NEC_RECEIVED ADDR=");
             Serial.print(address,HEX);
@@ -253,9 +254,11 @@ static void gw006_serial_command(const char *line) {
         }
         const unsigned int sample[4] = {900u,450u,560u,560u};
         Serial.println("TXTEST: PA25, 38kHz, one 4-pulse frame; no flash write");
-        IR.begin((uint8_t)IR_RX, (uint8_t)IR_TX, IR_MODE_TX, 38000u);
+        IR.begin((uint8_t)IR_TX, IR_MODE_TX, 38000u);
         IR.send(sample,4u);
-        IR.end();
+        /* Vendor send() already disables TX. Avoid IR.end() here: the
+         * Arduino 3.1.9 implementation passes Arduino indices directly to
+         * Pinmux_Config rather than the PA25/PA26 chip pin identifiers. */
         Serial.println("TXTEST_LIBRARY_RETURNED; VERIFY_CARRIER_WITH_RECEIVER");
         return;
     }
