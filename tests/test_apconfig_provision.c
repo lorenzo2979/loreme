@@ -92,6 +92,26 @@ static void test_apply(void) {
     reset();fail_commit=1;assert(gwir_provision_apply(&p,&ops)==-5);
     assert(stages==1 && verifications==1 && commits==1 && rollbacks==1);
     assert(gwir_provision_apply(&p,NULL)==-1);
+    /* Direct API call with malformed non-terminated fields must fail before
+     * any attempt to parse IPv4 or invoke the credential backend. */
+    reset();
+    memset(&p,0,sizeof(p));
+    strcpy(p.ssid,"My Router");
+    p.use_dhcp=1;
+    memset(p.duckdns_host,'x',sizeof(p.duckdns_host));
+    assert(gwir_provision_apply(&p,&ops)==-2 && stages==0);
+    memset(&p,0,sizeof(p));
+    strcpy(p.ssid,"My Router");
+    p.use_dhcp=1;
+    p.duckdns_enabled=1;
+    strcpy(p.duckdns_host,"a.duckdns.org");
+    strcpy(p.duckdns_token,"0123456789abcdef");
+    p.secure_transport_verified=1;
+    assert(gwir_provision_apply(&p,&ops)==0);
+    reset();
+    p.secure_transport_verified=0;
+    assert(gwir_provision_apply(&p,&ops)==-2 && stages==0);
+
     gwir_provision_wipe(&p);for(size_t i=0;i<sizeof(p);++i) assert(((uint8_t*)&p)[i]==0);
 }
 int main(void){test_parse();test_apply();puts("PASS: APConfig WiFi, DHCP/static IPv4, protected DuckDNS, rollback and secret wiping");}
