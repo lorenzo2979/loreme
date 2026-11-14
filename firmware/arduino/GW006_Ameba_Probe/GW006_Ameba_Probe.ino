@@ -28,6 +28,7 @@ extern "C" {
 #include "src/gwir_amebad_board_pins.h"
 #include "src/gwir_amebad_vendor_bus.h"
 #include "src/gwir_ir_pipeline.h"
+#include "src/gwir_apconfig_controller.h"
 }
 
 static constexpr unsigned int kTVButtons = 36u;
@@ -110,6 +111,12 @@ static bool gw006_store_auth_contracts_selftest() {
 }
 /* A fixed PUBLIC self-test vector, NOT a device secret. Checks that
  * Realtek's HMAC implementation matches desktop SHA-256/HMAC exactly. */
+/* This is a linker/safety contract, not board GPIO or AP authorization. */
+static bool gw006_apconfig_controller_contract_selftest() {
+    gwir_apcfg_backend blocked = {};
+    return gwir_apconfig_controller_init(nullptr, blocked, nullptr, nullptr) == -1 &&
+           gwir_apconfig_controller_poll(nullptr, 0u) == -1;
+}
 static bool gw006_crypto_selftest() {
     const char text[] = "GWIR3-AmebaD-hmac-self-test";
     static const uint8_t expected[32] = {
@@ -302,6 +309,9 @@ void setup() {
     Serial.println(gw006_store_auth_contracts_selftest()
                    ? "GW006 NINE CORE MODULES: AUTH + 96-KEY NOR JOURNAL CONTRACTS PASS"
                    : "GW006 AUTH/JOURNAL SOURCE CONTRACT TEST FAILED");
+    Serial.println(gw006_apconfig_controller_contract_selftest()
+                   ? "GW006 APConfig button/session linked; physical gate remains closed"
+                   : "GW006 APConfig controller contract FAILED");
     Serial.println(gw006_crypto_selftest()
                    ? "GW006 AMEBAD REALTEK HMAC-SHA256 VECTOR PASS"
                    : "GW006 AMEBAD REALTEK HMAC-SHA256 VECTOR FAILED");
