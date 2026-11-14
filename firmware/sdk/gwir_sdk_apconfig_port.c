@@ -46,7 +46,7 @@ static int fixed_public_identity(void *ctx, gwir_apcfg_identity *out)
         backend.load_identity(backend.ctx, out) != 0) return -1;
     /* The temporary network's name must be exactly the user-approved SSID.
        Reject other names; never fall back to a permanent/open default. */
-    return strcmp(out->ssid, "GW006-IR-SETUP") == 0 ? 0 : -1;
+    return memcmp(out->ssid, "GW006-IR-SETUP", sizeof("GW006-IR-SETUP")) == 0 ? 0 : -1;
 }
 int gwir_sdk_apconfig_install_backend(gwir_apcfg_backend ops)
 {
