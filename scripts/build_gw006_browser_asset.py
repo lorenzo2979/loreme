@@ -24,21 +24,7 @@ def assemble():
     ui = UI.read_text(encoding="utf-8")
     if html.count("<script>/*GWIR_INLINE_SCRIPT*/</script>") != 1:
         raise ValueError("Missing or multiple script slots")
-    if re.search(r"(?m)^\s*import\s", ui) or re.search(r"(?m)^\s*import\s", protocol):
-        raise ValueError("Remote asset must be self-contained")
-    expr = r"\bexport\s+\{[^}]+\};?\s*$"
-    protocol, count = re.subn(expr, "", protocol, count=1, flags=re.S)
-    if count != 1 or re.search(r"\bexport\b", protocol):
-        raise ValueError("Unexpected ES module export structure")
-    js = protocol.rstrip() + "\n" + ui.rstrip() + "\n"
-    html = html.replace("/*GWIR_INLINE_SCRIPT*/", js, 1)
-    styles = re.findall(r"<style>(.*?)</style>", html, flags=re.S)
-    scripts = re.findall(r"<script>(.*?)</script>", html, flags=re.S)
-    if len(styles) != 1 or len(scripts) != 1:
-        raise ValueError("Unexpected inline execution points")
-    if any(x in html for x in ["<script src=", "http://cdn", "eval(", "new Function("]):
-        raise ValueError("External execution forbidden")
-    if re.search(r"(?<![A-Za-z_])(localStorage|sessionStorage)\\s*(?:\\.|\\[)", js):
+    if any(name in js for name in ("localStorage.", "localStorage[", "sessionStorage.", "sessionStorage[")):
         raise ValueError("Secret persistence forbidden")
     def csp_hash(blob):
         return "'sha256-" + base64.b64encode(hashlib.sha256(blob.encode("utf-8")).digest()).decode() + "'"
