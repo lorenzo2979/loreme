@@ -175,7 +175,7 @@ static void gw006_serial_command(const char *line) {
         return;
     }
     if (!strcmp(line,"HELP")) {
-        Serial.println("GW006: HELP STATUS FLASHID PINS WIFI WIFISTATUS TXTEST-PA25-LED-REMOVED");
+        Serial.println("GW006: HELP STATUS FLASHID PINS WIFI WIFISTATUS TXTEST-PA25-LED-REMOVED RXTEST-PA26");
         return;
     }
     if (!strcmp(line,"WIFI")) {
@@ -223,6 +223,27 @@ static void gw006_serial_command(const char *line) {
             Serial.print(id[i],HEX);
         }
         Serial.println(id[2]==0x17u ? " CAPACITY=8MiB" : " CAPACITY=UNVERIFIED");
+        return;
+    }
+    if (!strcmp(line,"RXTEST-PA26")) {
+        if (s_runtime.running()) {
+            Serial.println("RXTEST_REFUSED: AUTH_OWNER_ACTIVE");
+            return;
+        }
+        Serial.println("RXTEST: press a NEC-protocol remote toward the PA26 IR receiver");
+        /* This is a short official Arduino library connectivity check.
+         * The production GWIR raw capture path handles all IR protocols and
+         * 2048 pulses; this diagnostic only reports NEC decoding. */
+        uint8_t address=0u,command=0u;
+        IR.beginNEC((uint8_t)IR_RX, (uint8_t)IR_TX, IR_MODE_RX);
+        bool received=IR.recvNEC(address,command,4000u)!=0u;
+        IR.end();
+        if (received) {
+            Serial.print("RXTEST_NEC_RECEIVED ADDR=");
+            Serial.print(address,HEX);
+            Serial.print(" CMD=");
+            Serial.println(command,HEX);
+        } else Serial.println("RXTEST_TIMEOUT_OR_NON_NEC");
         return;
     }
     if (!strcmp(line,"TXTEST-PA25-LED-REMOVED")) {
