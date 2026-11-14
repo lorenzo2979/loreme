@@ -26,7 +26,8 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           root = Path('firmware/arduino/GW006_Ameba_Probe/src')
-          assert len(list(root.glob('gwir_*.c'))) == 9
+          assert len(list(root.glob('gwir_*.c'))) == 10
+          assert (root/'gwir_wbrg1_flash_port.c').is_file()
           assert 'GWIR_STORE_ABORT = 15' in (root/'gwir_protocol.h').read_text()
           assert 'case GWIR_STORE_ABORT:' in (root/'gwir_saved_play_command.c').read_text()
           print('GW006_SOURCE_SYNC_PASS')
