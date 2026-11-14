@@ -49,7 +49,10 @@ def sync() -> None:
                 if check:
                     args.append("--check")
                 args.append(str(patch))
-                subprocess.run(args, cwd=work, check=True, capture_output=True)
+                result = subprocess.run(args, cwd=work, capture_output=True, text=True)
+                if result.returncode:
+                    raise SystemExit(f"Patch {patch_name} check={check} failed: "
+                                     f"{result.stdout} {result.stderr}")
         DEST.mkdir(parents=True, exist_ok=True)
         for module in COMPONENTS:
             for suffix in (".c", ".h"):
