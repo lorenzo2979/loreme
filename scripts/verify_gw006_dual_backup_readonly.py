@@ -16,7 +16,6 @@ import sys
 
 FLASH_SIZE = 8 * 1024 * 1024
 SECTOR = 4096
-CHUNK = 1024 * 1024
 # This range was a historical proposal, NEVER a safe/verified partition.
 UNAPPROVED_CANDIDATE = (0x200000, 0x700000)
 NO_RELEASE = "BLOCKED_NO_DEVICE_LAYOUT_OR_RECOVERY"
@@ -30,6 +29,9 @@ def compare_dumps(first: Path, second: Path) -> dict:
         raise BackupError("Serve una seconda lettura indipendente; stesso file vietato")
     if not first.is_file() or not second.is_file():
         raise BackupError("Entrambe le copie devono esistere come file")
+    # Two paths pointing to the same inode are NOT two independently held backups.
+    if first.stat().st_ino == second.stat().st_ino and first.stat().st_dev == second.stat().st_dev:
+        raise BackupError("Le due copie puntano allo stesso file fisico (hardlink)")
     a = first.stat().st_size
     b = second.stat().st_size
     if a != FLASH_SIZE or b != FLASH_SIZE:
@@ -44,7 +46,7 @@ def compare_dumps(first: Path, second: Path) -> dict:
     first_mib = None
     longest_ff = 0
     current_ff = 0
-    prev = 0
+    observed_different_byte = False
     sectors = 0
     # Iterate in 4096-byte sectors, without loading entire private flash dump
     # into memory. Reads from both backups; never opens either for writing.
@@ -79,8 +81,8 @@ def compare_dumps(first: Path, second: Path) -> dict:
                 if first_mib is None:
                     first_mib = x
                 elif x != first_mib:
-                    prev = 1
-    if not prev:
+                    observed_different_byte = True
+    if not observed_different_byte:
         raise BackupError("Dump uniformemente ripetuto (0xFF, 0x00 o altro): lettura sospetta")
     return {
         "result": "TWO_FILES_MATCH_READ_ONLY",
