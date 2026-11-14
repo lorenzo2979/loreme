@@ -127,34 +127,34 @@ jobs:
             "scripts/integrate_amebad_sdk.py":[
                 ('"gwir_sdk_bootstrap.c"]','"gwir_sdk_bootstrap.c", "gwir_sdk_provisioned_identity.c"]')],
             "scripts/verify_native_km4_objects.py":[
-                ('c_count != 42','c_count != 45'),
-                ('expected exact 42','expected exact 45')],
+                ('c_count != 42','c_count != 46'),
+                ('expected exact 42','expected exact 46')],
             "scripts/verify_native_km4_link_map.py":[
                 ("count != 42 or objs['native_objects_verified'] != 42",
-                 "count != 45 or objs['native_objects_verified'] != 45"),
-                ('exactly 42 validated','exactly 45 validated')],
+                 "count != 46 or objs['native_objects_verified'] != 46"),
+                ('exactly 42 validated','exactly 46 validated')],
             "tests/test_source_manifest.py":[
-                ('== 42','== 45'),('42 C sources','45 C sources')],
-            "tests/test_native_km4_objects.py":[('== 42','== 45')],
+                ('== 42','== 46'),('42 C sources','46 C sources')],
+            "tests/test_native_km4_objects.py":[('== 42','== 46')],
             # Mock SDK test counts main.o plus every GW006 source object.
-            # Security module + 2 browser transport modules => 46 mock objects.
+            # Security module + 2 browser transport modules + APConfig controller => 47 mock objects.
             "tests/test_sdk_integration.py":[
-                ("==43,'One of 43 SDK objects", "==46,'One of 46 SDK objects"),
-                ("43 mocked-SDK objects", "46 mocked-SDK objects")],
+                ("==43,'One of 43 SDK objects", "==47,'One of 47 SDK objects"),
+                ("43 mocked-SDK objects", "47 mocked-SDK objects")],
             "tests/test_native_km4_link_map.py":[
-                ('len(srcs) == 42','len(srcs) == 45'),
+                ('len(srcs) == 42','len(srcs) == 46'),
                 ("['modules_with_allocated_sections'] == 42",
-                 "['modules_with_allocated_sections'] == 45"),
-                ('len(actual) == 42','len(actual) == 45'),
+                 "['modules_with_allocated_sections'] == 46"),
+                ('len(actual) == 42','len(actual) == 46'),
                 ("{'native_objects_verified': 42}",
-                 "{'native_objects_verified': 45}"),
-                ('return_value=42','return_value=45'),
-                ("['expected_modules'] == 42","['expected_modules'] == 45"),
-                ("['loaded_modules'] == 42","['loaded_modules'] == 45"),
-                ("['loaded_but_unallocated']) == 23","['loaded_but_unallocated']) == 26"),
-                ('42-object','45-object'),
+                 "{'native_objects_verified': 46}"),
+                ('return_value=42','return_value=46'),
+                ("['expected_modules'] == 42","['expected_modules'] == 46"),
+                ("['loaded_modules'] == 42","['loaded_modules'] == 46"),
+                ("['loaded_but_unallocated']) == 23","['loaded_but_unallocated']) == 27"),
+                ('42-object','46-object'),
                 ('42 loads / 19 linked / 23 excluded',
-                 '45 loads / 19 linked / 26 excluded')]
+                 '46 loads / 19 linked / 27 excluded')]
           }
           for name, replacements in substitutions.items():
               path=Path(name)
@@ -168,11 +168,11 @@ jobs:
           source=Path('scripts/integrate_amebad_sdk.py')
           code=source.read_text()
           anchor='"gwir_runtime_owner.c"]'
-          replacement='"gwir_runtime_owner.c", "gwir_web_rpc.c", "gwir_web_http_post.c"]'
+          replacement='"gwir_runtime_owner.c", "gwir_web_rpc.c", "gwir_web_http_post.c", "gwir_apconfig_controller.c"]'
           if code.count(anchor)!=1 or replacement in code:
               raise SystemExit('Unexpected SDK integrator source')
           source.write_text(code.replace(anchor,replacement,1))
-          print('45-source SDK and ELF audit updated, original release attested independently')
+          print('46-source SDK and ELF audit updated, original release attested independently')
           PY
           # The reviewed real-object-dir change moved synthetic object
           # fixtures under asdk/build/ram. The fixture must make its parent.
@@ -320,7 +320,7 @@ jobs:
             git -C "$RUNNER_TEMP/ameba-rtos-d" checkout --detach FETCH_HEAD
           fi
           test "$(git -C "$RUNNER_TEMP/ameba-rtos-d" rev-parse HEAD)" = "$sdk_sha"
-      - name: Integrate 42 firmware C sources into the actual vendor SDK
+      - name: Integrate all 46 firmware C sources into the actual vendor SDK
         shell: bash
         run: |
           set -euo pipefail
@@ -408,7 +408,7 @@ jobs:
           sha256sum "$sdk/image/text_image2_ns.map" "$sdk/image/target_img2.axf" > /tmp/gwir_after.sha
           cmp /tmp/gwir_before.sha /tmp/gwir_after.sha
           echo 'KM4_OBJECTS_FRESH_AND_FINAL_LINK_UNCHANGED=PASS (NO BOARD TEST)'
-      - name: Audit REAL ARM final link (45 source modules, NO FLASH)
+      - name: Audit REAL ARM final link (46 source modules, NO FLASH)
         shell: bash
         run: |
           set -euo pipefail
