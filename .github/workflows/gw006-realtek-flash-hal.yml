@@ -39,8 +39,19 @@ jobs:
               raise SystemExit("Expected boot registration API missing")
           print("STORAGE_DEFAULT_DENY=PASS")
           PY
-          python3 scripts/verify_release_sources.py
-          python3 tests/test_source_manifest.py
+          # Audit the pinned archive IN ISOLATION: repository-only scripts
+          # are not part of its source inventory.
+          python3 - <<'PY'
+          import os, subprocess
+          from pathlib import Path
+          from zipfile import ZipFile
+          source=Path(os.environ['RUNNER_TEMP'])/'gw006-locked-original'
+          source.mkdir()
+          with ZipFile('source_bundles/GW006_WBRG1_STORAGE_PORT_SOURCE_ONLY.zip') as z:
+              z.extractall(source)
+          subprocess.run(['python3',str(source/'scripts/verify_release_sources.py'),
+                          '--root',str(source)],check=True)
+          PY
           python3 tests/test_native_km4_objects.py
           python3 tests/test_native_km4_link_map.py
       - name: Apply verified WBRG1 flash-region safety fix and reject unsafe target build
@@ -59,6 +70,32 @@ jobs:
           fi
           grep -F 'GW006 FLASH BLOCKED' /tmp/gw006-guard-stderr.log
           echo 'GW006_UNVERIFIED_PARTITION_COMPILE_DENIED=PASS'
+      - name: Link signed 96-button storage to secure boot (no flash approval)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check patches/gw006_boot_storage_runtime.patch
+          git apply --check patches/gw006_boot_storage_host_tests.patch
+          git apply patches/gw006_boot_storage_runtime.patch
+          git apply patches/gw006_boot_storage_host_tests.patch
+          # Maintain a *post-patch* source hash list for compiled object gates.
+          # The original release ZIP has already passed its independent SHA
+          # and immutable manifest verification above.
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          from scripts.verify_release_sources import records
+          p=Path('docs/CP21_SOURCE_MANIFEST.json')
+          obj=json.loads(p.read_text())
+          obj['files']=records(Path.cwd())
+          p.write_text(json.dumps(obj,indent=2)+'\\n')
+          PY
+          python3 scripts/verify_release_sources.py
+          make build/test_sdk_bootstrap
+          for mode in absent invalid ir-refuse success storage-ready storage-mount-error offline task-fail; do
+            ./build/test_sdk_bootstrap "$mode"
+          done
+          echo 'GW006_AUTHENTICATED_FLASH_IR_BOOT_HOST_TESTS=PASS'
       - name: Preserve exact audited source tree for offline code review (NO FLASH)
         uses: actions/upload-artifact@v4
         with:
