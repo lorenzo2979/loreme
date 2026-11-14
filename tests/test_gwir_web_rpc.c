@@ -22,6 +22,9 @@ int gwir_runtime_owner_feed(gwir_runtime_owner *owner,
     feeds++;
     if (failure_mode == 1) return -1;
     memcpy(reply, "GWAS", 4u);
+    reply[4] = GWIR_AUTH_VERSION;
+    reply[5] = GWIR_AUTH_FROM_DEVICE;
+    gwir_write_u32be(reply+32u, GWIR_HEADER_SIZE);
     if (send(ctx, reply, sizeof(reply)) != 0) return -1;
     emitted++;
     if (failure_mode == 2)
@@ -64,7 +67,7 @@ int main(void) {
                                 sizeof(output), &len) == -2 && len == 0u);
     request[5] = GWIR_AUTH_TO_DEVICE;
     assert(gwir_web_rpc_process(&owner, request, sizeof(request)-1u, output,
-                                sizeof(output), &len) == -2);
+                                sizeof(output), &len) == -1);
     request[32] = 0xff;
     assert(gwir_web_rpc_process(&owner, request, sizeof(request), output,
                                 sizeof(output), &len) == -2);
