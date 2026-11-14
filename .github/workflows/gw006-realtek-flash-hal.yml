@@ -43,6 +43,22 @@ jobs:
           python3 tests/test_source_manifest.py
           python3 tests/test_native_km4_objects.py
           python3 tests/test_native_km4_link_map.py
+      - name: Apply verified WBRG1 flash-region safety fix and reject unsafe target build
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check patches/gw006_reject_unverified_flash_region.patch
+          git apply patches/gw006_reject_unverified_flash_region.patch
+          # A careless one-flag enable must FAIL on the source that is built.
+          if cc -std=c11 -DGWIR_WBRG1_STORAGE_APPROVED=1 \
+             -Itests/stubs -Ifirmware/core -Ifirmware/realtek \
+             -c firmware/realtek/gwir_wbrg1_flash_port.c -o /tmp/gw006-unsafe.o \
+             >/tmp/gw006-guard-stdout.log 2>/tmp/gw006-guard-stderr.log; then
+             echo 'ERROR: unsafe flash target compiled unexpectedly'
+             exit 1
+          fi
+          grep -F 'GW006 FLASH BLOCKED' /tmp/gw006-guard-stderr.log
+          echo 'GW006_UNVERIFIED_PARTITION_COMPILE_DENIED=PASS'
       - name: Preserve exact audited source tree for offline code review (NO FLASH)
         uses: actions/upload-artifact@v4
         with:
