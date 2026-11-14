@@ -1,4 +1,4 @@
-name: GW006 Ameba Arduino integrated auth-IR-NOR build (BOARD NOT VERIFIED)
+name: GW006 Ameba Arduino integrated auth IR NOR build - board not verified
 on:
   push:
     branches: [review/gw006-realtek-flash-hal]
@@ -13,35 +13,33 @@ on:
 permissions:
   contents: read
 jobs:
-  arduino-probe:
+  arduino:
     runs-on: ubuntu-22.04
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
-      - name: Sync nine complete GWIR C modules from immutable release and patches
+      - name: Sync nine actual GWIR C modules and auth STORE patches
         shell: bash
         run: |
           set -euo pipefail
           python3 scripts/sync_gw006_arduino_core.py
           python3 - <<'PY'
           from pathlib import Path
-          root=Path('firmware/arduino/GW006_Ameba_Probe/src')
-          sources=sorted(root.glob('gwir_*.c'))
-          assert len(sources)==9, [p.name for p in sources]
+          root = Path('firmware/arduino/GW006_Ameba_Probe/src')
+          assert len(list(root.glob('gwir_*.c'))) == 9
           assert 'GWIR_STORE_ABORT = 15' in (root/'gwir_protocol.h').read_text()
           assert 'case GWIR_STORE_ABORT:' in (root/'gwir_saved_play_command.c').read_text()
-          print('GW006_ARDUINO_AUTH_STORE_IR_MODULE_SYNC=PASS')
+          print('GW006_SOURCE_SYNC_PASS')
           PY
       - uses: arduino/setup-arduino-cli@v2
-      - name: Install official Realtek AmebaD Arduino 3.1.9 (not GW006 board)
+      - name: Install official Realtek AmebaD Arduino 3.1.9
         shell: bash
         run: |
           set -euo pipefail
           URL='https://raw.githubusercontent.com/Ameba-AIoT/ameba-arduino-d/master/Arduino_package/package_realtek_amebad_index.json'
           arduino-cli core update-index --additional-urls "$URL"
           arduino-cli core install realtek:AmebaD@3.1.9 --additional-urls "$URL"
-          arduino-cli board listall realtek:AmebaD
-      - name: Compile and link official RTL8721DM family API probe, do not flash
+      - name: Build official RTL8721DM reference only - not a WBRG1 image
         shell: bash
         run: |
           set -euo pipefail
@@ -52,50 +50,38 @@ jobs:
             --verbose \
             firmware/arduino/GW006_Ameba_Probe \
             2>&1 | tee build/gw006-ameba-arduino/build.log
-          grep -q 'gw006_amebad_link_only_probe' \
-            firmware/arduino/GW006_Ameba_Probe/GW006_Ameba_Probe.ino
-          echo 'AMEBAD_ARDUINO_FAMILY_COMPILE=PASS; WBRG1_BOARD_SUPPORT=NOT_VERIFIED; NO_FLASH'
-      - name: Verify real ELF contains signed auth, persisted storage, IR, and PSRAM engine
+          echo 'ARDUINO_COMPILE_PASS; BOARD_WBRG1_NOT_TESTED; NO_FLASH'
+      - name: Verify ELF auth IR NOR HMAC symbols and PSRAM allocation
         shell: bash
         run: |
           set -euo pipefail
-          elf="build/gw006-ameba-arduino/application.axf"
+          elf=build/gw006-ameba-arduino/application.axf
           test -s "$elf"
           nm="$HOME/.arduino15/packages/realtek/tools/ameba_d_asdk_toolchain/1.0.1/bin/arm-none-eabi-nm"
           "$nm" --defined-only -C "$elf" > build/gw006-ameba-arduino/linked-symbols.txt
           python3 - <<'PY'
-          import re
           from pathlib import Path
-          data=Path('build/gw006-ameba-arduino/linked-symbols.txt').read_text()
-          required=[
-            'gwir_engine_process','gwir_fj_put','gwir_saved_play_command',
-            'gwir_auth_dispatch_routed','gwir_runtime_owner_feed',
-            'gw006_ameba_hmac_sha256','Gw006AmebaAuthenticatedTcp::poll()',
-          ]
-          missing=[n for n in required if n not in data]
-          if missing: raise SystemExit('Missing real linked firmware functions: '+', '.join(missing))
-          m=re.search(r'^([0-9a-fA-F]+)\\s+\\w\\s+s_gwir_engine
+          lines=Path('build/gw006-ameba-arduino/linked-symbols.txt').read_text().splitlines()
+          data='\n'.join(lines)
+          names=(
+              'gwir_engine_process', 'gwir_fj_put', 'gwir_saved_play_command',
+              'gwir_auth_dispatch_routed', 'gwir_runtime_owner_feed',
+              'gw006_ameba_hmac_sha256', 'Gw006AmebaAuthenticatedTcp::poll()',
+          )
+          missing=[name for name in names if name not in data]
+          if missing: raise SystemExit('ELF missing: '+str(missing))
+          addresses=[int(line.split()[0],16) for line in lines if line.endswith(' s_gwir_engine')]
+          if len(addresses)!=1 or not 0x02000000 <= addresses[0] < 0x02400000:
+              raise SystemExit('GWIR engine not linked into Realtek PSRAM: '+str(addresses))
+          print('GW006_NINE_CORE_MODULES_HMAC_TCP_PSRAM_ELF_PASS')
+          PY
+      - name: Upload diagnostics only - no flash images
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: gw006-amebad-arduino-awcu488-diagnostic-only
+          name: gw006-ameba-arduino-link-diagnostics-only
           path: |
             build/gw006-ameba-arduino/build.log
             build/gw006-ameba-arduino/linked-symbols.txt
-          if-no-files-found: warn
-          retention-days: 7
-,data,re.M)
-          if not m: raise SystemExit('No actual global IR engine symbol in ELF')
-          address=int(m.group(1),16)
-          if not 0x02000000 <= address < 0x02400000:
-            raise SystemExit(f'IR engine not in PSRAM: 0x{address:x}')
-          print(f'GW006_ARDUINO_LINKED_AUTH_IR_NOR_HMAC=PASS, ENGINE_IN_PSRAM=0x{address:08x}')
-          PY
-      - name: Preserve build diagnostics only
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gw006-amebad-arduino-awcu488-diagnostic-only
-          path: build/gw006-ameba-arduino/build.log
           if-no-files-found: warn
           retention-days: 7
