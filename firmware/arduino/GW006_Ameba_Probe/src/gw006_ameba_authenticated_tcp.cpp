@@ -22,13 +22,16 @@ static int write_signed(void *arg, const uint8_t *bytes, size_t len) {
 } // namespace
 
 Gw006AmebaAuthenticatedTcp::Gw006AmebaAuthenticatedTcp()
-  : server_(kGwAsPort), owner_(nullptr), active_(false) {}
+  : server_(kGwAsPort), owner_(nullptr), pipeline_(nullptr), active_(false) {}
 
-bool Gw006AmebaAuthenticatedTcp::begin(gwir_runtime_owner *owner) {
+bool Gw006AmebaAuthenticatedTcp::begin(gwir_runtime_owner *owner,
+                                        gwir_ir_pipeline *pipeline) {
     if (active_ || !owner || !owner->initialized || owner->connected ||
         !owner->rx.active || !owner->tx.active ||
+        !pipeline || !pipeline->ready || pipeline->engine != owner->engine ||
         WiFi.status() != WL_CONNECTED) return false;
     owner_ = owner;
+    pipeline_ = pipeline;
     server_.setNonBlockingMode();
     server_.begin();
     active_ = true;
@@ -41,12 +44,22 @@ void Gw006AmebaAuthenticatedTcp::end() {
     if (owner_ && owner_->connected)
         gwir_runtime_owner_disconnect(owner_);
     owner_ = nullptr;
+    pipeline_ = nullptr;
     active_ = false;
 }
 
 void Gw006AmebaAuthenticatedTcp::poll() {
     if (!active_) return;
-    if (!owner_ || !owner_->initialized || WiFi.status() != WL_CONNECTED) {
+    if (!owner_ || !owner_->initialized || !pipeline_ ||
+        !pipeline_->ready || WiFi.status() != WL_CONNECTED) {
+        end();
+        return;
+    }
+    /* The IRQ handler queues raw samples; only the serialized owner loop
+     * is permitted to turn these events into up to five IR captures. This
+     * step must run even when no TCP client is currently connected. */
+    if (pipeline_->receiving && pipeline_->engine->rx_armed &&
+        gwir_ir_pipeline_pump(pipeline_, 128u) < 0) {
         end();
         return;
     }
