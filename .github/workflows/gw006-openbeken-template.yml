@@ -1,0 +1,22 @@
+name: GW006 OpenBeken configuration evidence (READ ONLY)
+on:
+  push:
+    branches: [review/gw006-realtek-flash-hal]
+    paths:
+      - 'scripts/import_openbeken_template.py'
+      - 'tests/test_openbeken_template.py'
+      - '.github/workflows/gw006-openbeken-template.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-openbeken-template:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse and sanitize OpenBeken GPIO template examples
+        run: python3 -m unittest discover -s tests -p 'test_openbeken_template.py' -v
+      - name: Do not upload or write actual OpenBeken settings
+        run: |
+          echo "No user templates, passwords, serial numbers, MACs or backup images are collected by this workflow."
+          echo "Read-only importer. No hardware access. NO FLASH."
