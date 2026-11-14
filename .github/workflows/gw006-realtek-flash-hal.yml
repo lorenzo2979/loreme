@@ -70,6 +70,7 @@ jobs:
           fi
           grep -F 'GW006 FLASH BLOCKED' /tmp/gw006-guard-stderr.log
           echo 'GW006_UNVERIFIED_PARTITION_COMPILE_DENIED=PASS'
+      # Apply the complete, context-verified storage-boot test patch.
       - name: Link signed 96-button storage to secure boot (no flash approval)
         shell: bash
         run: |
