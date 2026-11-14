@@ -209,6 +209,7 @@ jobs:
           # and before the native vendor ARM compilation.
           git show HEAD:firmware/core/gwir_apconfig_provision.h > firmware/core/gwir_apconfig_provision.h
           git show HEAD:firmware/core/gwir_apconfig_provision.c > firmware/core/gwir_apconfig_provision.c
+          git show HEAD:tests/test_apconfig_provision.c > tests/test_apconfig_provision.c
           make build/test_apconfig_provision
           ./build/test_apconfig_provision
           python3 - <<'PY'
