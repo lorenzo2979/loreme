@@ -4,6 +4,7 @@
 #include "../core/gwir_engine.h"
 #include "../core/gwir_auth.h"
 #include "gwir_sdk_hmac.h"
+#include "gwir_sdk_provisioned_identity.h"
 #include "gwir_sdk_apconfig_port.h"
 #include "gwir_sdk_apconfig_wifi.h"
 #include "../core/gwir_apconfig_button.h"
@@ -46,6 +47,9 @@ void gwir_sdk_integration_banner(void)
     ok = ok && (gwir_auth_dispatch(NULL, NULL, NULL, NULL, 0u, NULL, 0u, NULL, 0u, NULL) == GWIR_AUTH_REJECT);
     /* Check the HMAC provider is linked but reject missing key before any crypto call. */
     ok = ok && (gwir_sdk_mbedtls_hmac(NULL, NULL, 32u, msg, sizeof(msg), unused_digest) == GWIR_SDK_HMAC_REJECT);
+    /* Retain the real provider in the final linked image, while refusing
+     * any attempt to generate credentials without a board-backed identity. */
+    ok = ok && (gwir_sdk_identity_init(NULL, NULL, NULL) == -1);
     /* Verify fail-closed APConfig port, no GPIO, Wi-Fi or IR activity. */
     ok = ok && (gwir_apconfig_init(NULL, (gwir_apconfig_ops){0}) == -1);
     ok = ok && (gwir_sdk_button_read_pb23(NULL) == -1);
