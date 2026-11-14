@@ -14,6 +14,9 @@ on:
       - 'firmware/sdk/gwir_sdk_provisioned_identity.h'
       - 'tests/test_sdk_provisioned_identity.c'
       - 'tests/test_gw006_product_boot.c'
+      - 'firmware/core/gwir_apconfig_provision.c'
+      - 'firmware/core/gwir_apconfig_provision.h'
+      - 'tests/test_apconfig_provision.c'
   workflow_dispatch:
 permissions:
   contents: read
@@ -201,6 +204,13 @@ jobs:
           # Restore branch-reviewed board hook after pinned archive extraction.
           git show HEAD:firmware/sdk/gwir_sdk_diag.c > firmware/sdk/gwir_sdk_diag.c
           grep -F 'int gwir_sdk_board_prepare(void)' firmware/sdk/gwir_sdk_diag.c
+          # Pinned bundle has the old Wi-Fi-only APConfig. Restore current
+          # reviewed DHCP/static and DuckDNS parsing before the hash gate
+          # and before the native vendor ARM compilation.
+          git show HEAD:firmware/core/gwir_apconfig_provision.h > firmware/core/gwir_apconfig_provision.h
+          git show HEAD:firmware/core/gwir_apconfig_provision.c > firmware/core/gwir_apconfig_provision.c
+          make build/test_apconfig_provision
+          ./build/test_apconfig_provision
           python3 - <<'PY'
           import json
           from pathlib import Path
