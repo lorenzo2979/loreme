@@ -79,6 +79,11 @@ const gwir_sdk_boot_config *gwir_gw006_board_port_config(void);
 int gwir_sdk_board_prepare(void)
 {
     const gwir_sdk_boot_config *cfg;
+    /* Allow physical-button first-time APConfig even before a STA HMAC
+     * identity exists. The SDK port refuses to create any task unless a
+     * separately reviewed GW006 board approval and provisioning backend
+     * are present. This call alone NEVER starts an open AP. */
+    (void)gwir_sdk_apconfig_commission();
     if (!gwir_gw006_board_port_config) return -1;
     cfg = gwir_gw006_board_port_config();
     if (!cfg) return -1;
