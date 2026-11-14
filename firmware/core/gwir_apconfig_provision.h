@@ -12,6 +12,16 @@ typedef struct {
     char ssid[GWIR_PROVISION_SSID_MAX + 1u];
     char password[GWIR_PROVISION_PASSWORD_MAX + 1u];
     uint8_t is_open; /* 1=home network open, 0=WPA2 passphrase; unrelated to open APConfig */
+    uint8_t use_dhcp;  /* default = 1; static settings only apply to STA */
+    char ipv4[16];
+    char netmask[16];
+    char gateway[16];
+    char dns1[16];
+    char dns2[16];
+    uint8_t duckdns_enabled;
+    uint8_t secure_transport_verified; /* required for accepting a DuckDNS secret */
+    char duckdns_host[80];
+    char duckdns_token[129];
 } gwir_provision_profile;
 typedef struct {
     void *ctx;
@@ -29,6 +39,16 @@ typedef struct {
  * password is optional empty only for an open home AP. On failure, output wiped. */
 int gwir_provision_parse_form(const uint8_t *body, size_t length,
                               gwir_provision_profile *out);
+/* Extended form with ip_mode=dhcp|static, ip, mask, gateway, dns1,
+ * optional dns2, duckdns=0|1, duckdns_host, duckdns_token.
+ * trusted_secret_channel MUST be verified by the transport, not supplied
+ * by the browser/form. An unprotected open-AP HTTP session MUST pass 0.
+ * DuckDNS tokens cannot enter the device over unprotected provisioning.
+ * Existing legacy SSID/password parser remains for backwards compatibility.
+ */
+int gwir_provision_parse_form_secure(const uint8_t *body, size_t length,
+                                    gwir_provision_profile *out,
+                                    int trusted_secret_channel);
 /* Return success only if stage, connectivity verification and commit succeed.
  * Does not turn on any radio, start web services, or log passwords. */
 int gwir_provision_apply(const gwir_provision_profile *profile,
