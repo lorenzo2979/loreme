@@ -9,6 +9,7 @@ Decisione confermata dall'utente: la GW006 deve funzionare autonomamente con int
 - Fino a 5 pacchetti IR per tasto, con apprendimento, prova, riproduzione, salvataggio ed eliminazione.
 - Memoria permanente dopo perdita di alimentazione; capacità calcolata con dati caso peggiore e margine.
 - Wi-Fi configurabile (prima connessione AP, poi STA) e accesso locale autenticato.
+- **APConfig resta attivabile dal pulsante fisico della GW006**, usando il comportamento previsto dal progetto: il pulsante di configurazione non viene eliminato o sostituito dall'interfaccia web. L'accesso e il salvataggio delle credenziali devono rimanere protetti.
 - Quattro telecomandi grafici responsivi, status codici salvati, funzioni di configurazione e diagnostica.
 - Rifiutare credenziali di fabbrica condivise, autenticazione assente, contatori anti-replay resettati senza protezione.
 - Non usare una partizione Flash da un dump WBRG1 di altri prodotti come se fosse certamente libera sulla GW006.
