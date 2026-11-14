@@ -1,0 +1,122 @@
+name: GW018-DM reference native KM0 KM4 build (NOT FOR GW006 FLASH)
+on:
+  workflow_dispatch:
+  push:
+    branches: [review/gw006-realtek-flash-hal]
+    paths:
+      - '.github/workflows/gw018-dm-reference-compile.yml'
+permissions:
+  contents: read
+
+jobs:
+  gw018-build:
+    name: Build public GW018-DM Realtek source, read-only
+    runs-on: ubuntu-22.04
+    timeout-minutes: 50
+    steps:
+      - name: Checkout analysis repository
+        uses: actions/checkout@v4
+
+      - name: Install 32-bit SDK runtime dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            make python3 file libc6-i386 lib32z1 libstdc++6:i386 libncurses5:i386
+
+      - name: Install ARM GCC 10.3 toolchain
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: '10.3-2021.10'
+          path-env-var: ARM_NONE_EABI_GCC_PATH
+
+      - name: Fetch exact public GW018-DM source commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth=1 --single-branch -b dev \
+            https://github.com/jasperw1996/ambd_sdk_GW018-DM.git gw018-reference
+          actual="$(git -C gw018-reference rev-parse HEAD)"
+          test "$actual" = 'f144bf1b19dc869730ef09fc2515760245a26a97'
+          echo "GW018_SOURCE_SHA=$actual" >> "$GITHUB_ENV"
+          test -f gw018-reference/project/realtek_amebaD_va0_example/src/src_hp/main.c
+          test -f gw018-reference/project/realtek_ameD_va0_example/src/src_lp/Makefile || \
+            test -f gw018-reference/project/realtek_amebaD_va0_example/src/src_lp/Makefile
+
+      - name: Build KM0 low-power core
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd gw018-reference/project/realtek_amebaD_va0_example/GCC-RELEASE/project_lp
+          if ! timeout 1200 make all > "$GITHUB_WORKSPACE/gw018-km0.log" 2>&1; then
+            tail -150 "$GITHUB_WORKSPACE/gw018-km0.log"
+            exit 1
+          fi
+          echo 'GW018_KM0_BUILD=PASS'
+          tail -25 "$GITHUB_WORKSPACE/gw018-km0.log"
+
+      - name: Build KM4 high-performance core
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd gw018-reference/project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp
+          if ! timeout 1200 make all > "$GITHUB_WORKSPACE/gw018-km4.log" 2>&1; then
+            tail -150 "$GITHUB_WORKSPACE/gw018-km4.log"
+            exit 1
+          fi
+          echo 'GW018_KM4_BUILD=PASS'
+          tail -25 "$GITHUB_WORKSPACE/gw018-km4.log"
+
+      - name: Verify output images and produce SHA256 manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from hashlib import sha256
+          import json,os
+          root=Path('gw018-reference/project/realtek_amebaD_va0_example/GCC-RELEASE')
+          out=Path('gw018-reference-build-evidence')
+          out.mkdir(exist_ok=True)
+          sources=[
+              ('project_lp','km0_boot_all.bin'),
+              ('project_hp','km4_boot_all.bin'),
+              ('project_hp','km0_km4_image2.bin'),
+          ]
+          manifest={
+             'source_repository':'jasperw1996/ambd_sdk_GW018-DM',
+             'source_commit':os.environ['GW018_SOURCE_SHA'],
+             'reference_target':'GW018-DM WBRG1 RTL8721CSM',
+             'installed_on_a_real_device':False,
+             'certified_for_GW006':False,
+             'safe_to_flash_on_GW006':False,
+             'important':'Reference build only. GW018 GPIO/UART/boot/flash layout may differ from GW006.',
+             'images':[]
+          }
+          for where,name in sources:
+              p=root/where/'asdk/image'/name
+              if not p.is_file() or p.stat().st_size<4096:
+                  raise SystemExit('Expected image absent/too small: '+str(p))
+              raw=p.read_bytes()
+              (out/name).write_bytes(raw)
+              manifest['images'].append({'file':name,'bytes':len(raw),'sha256':sha256(raw).hexdigest()})
+          (out/'BUILD_EVIDENCE.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          (out/'NON_FLASHARE_SU_GW006.txt').write_text(
+              'Only GW018-DM reference images. Not an IR Universal GW006 firmware. '
+              'Do not install on GW006; no HW testing or flash map validation.\n')
+          print(json.dumps(manifest,indent=2))
+          PY
+
+      - name: Upload logs and evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw018-dm-native-build-reference-DO-NOT-FLASH-GW006
+          path: |
+            gw018-km0.log
+            gw018-km4.log
+            gw018-reference-build-evidence/
+          retention-days: 14
+          if-no-files-found: warn
