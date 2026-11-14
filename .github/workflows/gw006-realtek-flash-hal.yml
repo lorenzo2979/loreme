@@ -22,6 +22,9 @@ on:
       - 'firmware/core/gwir_web_http_post.c'
       - 'firmware/core/gwir_web_http_post.h'
       - 'firmware/realtek/gwir_amebad_auth_server.c'
+      - 'web/**'
+      - 'scripts/build_gw006_browser_asset.py'
+      - 'tests/test_gw006_browser_gwcd_c.c'
   workflow_dispatch:
 permissions:
   contents: read
@@ -117,6 +120,8 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           substitutions={
+            "scripts/verify_release_sources.py":[
+                ('".html", ".json"', '".html", ".json", ".js", ".mjs"')],
             "scripts/integrate_amebad_sdk.py":[
                 ('"gwir_sdk_bootstrap.c"]','"gwir_sdk_bootstrap.c", "gwir_sdk_provisioned_identity.c"]')],
             "scripts/verify_native_km4_objects.py":[
@@ -241,6 +246,11 @@ jobs:
           git show HEAD:tests/test_apconfig_provision.c > tests/test_apconfig_provision.c
           make build/test_apconfig_provision
           ./build/test_apconfig_provision
+          # Embed the real reviewed 96-button HTML and WebCrypto JS into
+          # the SDK dashboard gzip asset with exact CSP hash pins.
+          # This never enables HTTP credentials: the JS refuses plain HTTP.
+          python3 scripts/build_gw006_browser_asset.py --write
+          grep -F "script-src 'sha256-" firmware/core/gwir_dashboard_asset.c
           python3 - <<'PY'
           import json
           from pathlib import Path
