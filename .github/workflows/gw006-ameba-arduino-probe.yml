@@ -4,6 +4,9 @@ on:
     branches: [review/gw006-realtek-flash-hal]
     paths:
       - 'firmware/arduino/**'
+      - 'firmware/core/gwir_apconfig_controller.*'
+      - 'firmware/core/gwir_apconfig_button.*'
+      - 'firmware/core/gwir_apconfig_session.*'
       - 'scripts/sync_gw006_arduino_core.py'
       - 'scripts/apply_gw006_storage_abort.py'
       - 'patches/gw006_authenticated_storage_*.patch'
@@ -26,8 +29,9 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           root = Path('firmware/arduino/GW006_Ameba_Probe/src')
-          assert len(list(root.glob('gwir_*.c'))) == 21
+          assert len(list(root.glob('gwir_*.c'))) == 24
           assert (root/'gwir_ir_pipeline.c').is_file()
+          assert (root/'gwir_apconfig_controller.c').is_file()
           assert (root/'gwir_amebad_rx_irq.c').is_file()
           assert (root/'gwir_amebad_vendor_bus.c').is_file()
           assert (root/'gwir_wbrg1_flash_port.c').is_file()
@@ -73,6 +77,7 @@ jobs:
               'gw006_ameba_hmac_sha256', 'Gw006AmebaAuthenticatedTcp::poll()',
               'Gw006AmebaRuntime::begin(', 'Gw006AmebaRuntime::poll()',
               'gwir_ir_pipeline_init', 'gwir_wbrg1_flash_port_attach',
+              'gwir_apconfig_controller_init', 'gwir_apconfig_controller_poll',
               'gwir_amebad_vendor_board_ir_setup',
           )
           missing=[name for name in names if name not in data]
