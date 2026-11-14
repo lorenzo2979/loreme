@@ -8,6 +8,7 @@ on:
       - 'tests/test_gwir_web_rpc.c'
       - 'firmware/core/gwir_web_http_post.*'
       - 'tests/test_gwir_web_http_post.c'
+      - 'firmware/realtek/gwir_amebad_auth_server.c'
   workflow_dispatch:
 permissions:
   contents: read
@@ -31,9 +32,10 @@ jobs:
               for m in z.infolist():
                   rel=PurePosixPath(m.filename)
                   if (m.is_dir() or rel.is_absolute() or '..' in rel.parts or
-                      not (m.filename.startswith('firmware/core/') and
-                           (m.filename.endswith('.h') or
-                            m.filename == 'firmware/core/gwir_protocol.c'))):
+                      not ((m.filename.startswith('firmware/core/') and
+                            (m.filename.endswith('.h') or
+                             m.filename == 'firmware/core/gwir_protocol.c')) or
+                           m.filename == 'firmware/realtek/gwir_amebad_auth_server.h')):
                       continue
                   dest=out/m.filename
                   dest.parent.mkdir(parents=True,exist_ok=True)
@@ -59,4 +61,10 @@ jobs:
             tests/test_gwir_web_http_post.c \
             -o build/gwir_web_http_header_test
           ./build/gwir_web_http_header_test
-          echo 'WEB_RPC_AND_STRICT_HTTP_HEADER_HOST_GATE=PASS; NOT AN INSTALLABLE IMAGE'
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Ifirmware/realtek -Ifirmware/core \
+            -Ibuild/cp40-base/firmware/realtek \
+            -Ibuild/cp40-base/firmware/core \
+            -c firmware/realtek/gwir_amebad_auth_server.c \
+            -o build/gwir_auth_server_browser_single_owner.o
+          echo 'WEB_RPC_HTTP_AND_SINGLE_OWNER_SOCKET_COMPILE=PASS; NOT AN INSTALLABLE IMAGE'
