@@ -38,7 +38,7 @@ jobs:
               b = connection.read(flash_size+1)
             if len(b) != flash_size:
               raise ValueError("Wrong 8MiB image size for "+label)
-            actual_sha = hashlib.sha1(b"blob "+str(len(b)).encode()+b"\\x00"+b).hexdigest()
+            actual_sha = hashlib.sha1(b"blob "+str(len(b)).encode()+b"\x00"+b).hexdigest()
             if actual_sha != expected_git_sha:
               raise ValueError("Git object hash mismatch for "+label)
             images.append((label,b))
@@ -47,11 +47,11 @@ jobs:
           mask_any_ff=[]
           per_reference=[]
           for label, b in images:
-            blank=sum(b[i:i+sector] == b"\\xff"*sector for i in range(0,flash_size,sector))
+            blank=sum(b[i:i+sector] == b"\xff"*sector for i in range(0,flash_size,sector))
             per_reference.append({"name":label,"sha256":hashlib.sha256(b).hexdigest(),"erased_4k_sectors":blank})
           for pos in range(0,flash_size,sector):
             chunks=[b[pos:pos+sector] for _,b in images]
-            is_ff=[chunk == b"\\xff"*sector for chunk in chunks]
+            is_ff=[chunk == b"\xff"*sector for chunk in chunks]
             mask_identical.append(all(chunk==chunks[0] for chunk in chunks[1:]))
             mask_all_ff.append(all(is_ff))
             mask_any_ff.append(any(is_ff))
@@ -85,7 +85,7 @@ jobs:
           with open("reference-report/wbrg1_public_structural_comparison.json","w") as f:
             json.dump(report,f,indent=2)
           with open("reference-report/README_NOT_FOR_FLASH.txt","w") as f:
-            f.write("Aggregated public WBRG1 reference comparison only. Source binaries contain third-party keys and are NOT distributed. This report is NOT a partition map or flash authorization.\\n")
+            f.write("Aggregated public WBRG1 reference comparison only. Source binaries contain third-party keys and are NOT distributed. This report is NOT a partition map or flash authorization.\n")
           print("PASS: "+str(len(images))+" public 8MiB WBRG1 flash references validated via Git blob SHA1; aggregate report generated. DO NOT FLASH.")
           PY
       - name: Publish aggregate comparison only; never upload source dump bytes
