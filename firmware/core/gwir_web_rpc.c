@@ -13,9 +13,18 @@ typedef struct {
 static int gather_signed(void *context, const uint8_t *data, size_t len)
 {
     gwir_web_rpc_sink *sink = (gwir_web_rpc_sink *)context;
-    if (!sink || !sink->bytes || !data || !len ||
+    if (!sink || !sink->bytes || !data ||
         sink->replies != 0u || len > sink->capacity ||
-        len > GWIR_AUTH_MAX_PACKET) return -1;
+        len < GWIR_AUTH_HEADER_BYTES + GWIR_HEADER_SIZE + GWIR_AUTH_TAG_BYTES ||
+        len > GWIR_AUTH_MAX_PACKET ||
+        memcmp(data, "GWAS", 4u) != 0 ||
+        data[4] != GWIR_AUTH_VERSION ||
+        data[5] != GWIR_AUTH_FROM_DEVICE ||
+        data[6] != 0u || data[7] != 0u) return -1;
+    uint32_t inner = gwir_read_u32be(data + 32u);
+    if (inner < GWIR_HEADER_SIZE || inner > GWIR_MAX_MESSAGE ||
+        len != GWIR_AUTH_HEADER_BYTES + (size_t)inner + GWIR_AUTH_TAG_BYTES)
+        return -1;
     /* The signature is verified by the browser, not by trusting HTTP 200. */
     memmove(sink->bytes, data, len);
     sink->used = len;
