@@ -1,0 +1,31 @@
+name: GW006 APConfig button-session controller host test (NO FLASH)
+on:
+  push:
+    branches: [review/gw006-realtek-flash-hal]
+    paths:
+      - 'firmware/core/gwir_apconfig_controller.*'
+      - 'firmware/core/gwir_apconfig_button.*'
+      - 'firmware/core/gwir_apconfig_session.*'
+      - 'tests/test_gwir_apconfig_controller.c'
+      - '.github/workflows/gw006-apconfig-controller.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  controller:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Host compile and fail-closed lifecycle tests (no device)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O1 -g -Wall -Wextra -Werror -pedantic \
+             -fsanitize=undefined -fno-omit-frame-pointer \
+             -Ifirmware/core \
+             firmware/core/gwir_apconfig_button.c \
+             firmware/core/gwir_apconfig_session.c \
+             firmware/core/gwir_apconfig_controller.c \
+             tests/test_gwir_apconfig_controller.c -o /tmp/gw006-apconfig-controller
+          /tmp/gw006-apconfig-controller
+          echo 'GW006_APCONFIG_LIFECYCLE=PASS; WBRG1_BOARD_NOT_APPROVED; NO_FLASH'
