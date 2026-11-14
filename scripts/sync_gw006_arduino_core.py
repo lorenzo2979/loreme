@@ -85,6 +85,14 @@ def sync() -> None:
             source = source.replace('#include "../core/gwir_flash_journal.h"',
                                     '#include "gwir_flash_journal.h"')
             (DEST / ("gwir_wbrg1_flash_port" + suffix)).write_text(source)
+        # The branch carries the newer, reviewed PA25/PA26 hardware gate.
+        # The archived WBRG1 source bundle predates that board-setup symbol.
+        # Use the tracked native adapter so the Arduino image links to the
+        # exact GPIO implementation documented by the current project.
+        updated_bus = (ROOT / "firmware/realtek/gwir_amebad_vendor_bus.c").read_text()
+        if "int gwir_amebad_vendor_board_ir_setup(void)" not in updated_bus:
+            raise SystemExit("Current PA25/PA26 board setup implementation missing")
+        realtek_ir_sources["gwir_amebad_vendor_bus.c"] = updated_bus
         for name, source in realtek_ir_sources.items():
             source = source.replace('#include "../core/gwir_protocol.h"',
                                     '#include "gwir_protocol.h"')
