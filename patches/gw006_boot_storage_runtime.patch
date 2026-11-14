@@ -1,0 +1,122 @@
+--- a/firmware/sdk/gwir_sdk_bootstrap.h
++++ b/firmware/sdk/gwir_sdk_bootstrap.h
+@@ -32,6 +32,16 @@
+      * A board port needs independently verified IR pinmux/IRQ first. */
+     gwir_ir_pipeline *ir_pipeline;
+     const gwir_ir_pipeline_config *ir_config;
++    /* When saved is non-NULL ALL storage fields become mandatory. The board
++     * port must provide a separately audited, exclusive NOR partition.
++     * These pointers must remain alive for the entire authenticated session.
++     * Mount is read-only, but subsequent signed STORE commands write NOR. */
++    gwir_fj_store *store;
++    const gwir_fj_io *store_io;
++    uint32_t *pulse_scratch; /* 2048 entries; static, never a task stack */
++    size_t pulse_capacity;
++    uint8_t *upload_scratch; /* >= GWIR_GWCD_MAX_SIZE, static */
++    size_t upload_capacity;
+ } gwir_sdk_boot_config;
+ 
+ /* Register once, before GWIR's hook in vendor main. Never from an ISR. */
+--- a/firmware/sdk/gwir_sdk_bootstrap.c
++++ b/firmware/sdk/gwir_sdk_bootstrap.c
+@@ -7,6 +7,27 @@
+ static const gwir_sdk_boot_config *boot_config;
+ static unsigned boot_sealed;
+ static unsigned boot_scheduled;
++/* Only one authenticated owner task may use the physical GW006 IR controller.
++ * This backing object lives as long as the FreeRTOS task. */
++static gwir_fj_play_ops saved_ir_ops;
++
++static int verified_saved_ir(void *ctx)
++{
++    const gwir_ir_pipeline *p = (const gwir_ir_pipeline *)ctx;
++    return p && p->ready && p->bus.ops.board_ir_ready &&
++           p->bus.ops.board_ir_ready(p->bus.ops.ctx) == 1;
++}
++
++static int transmit_saved_ir(void *ctx, uint32_t carrier, uint16_t duty,
++                             const uint32_t *durations, uint16_t count,
++                             uint32_t gap)
++{
++    gwir_ir_pipeline *p = (gwir_ir_pipeline *)ctx;
++    if (verified_saved_ir(ctx) != 1 || !p->engine ||
++        !p->engine->hal.tx || !durations || !count) return -1;
++    return p->engine->hal.tx(p->engine->hal.ctx, carrier, duty,
++                             durations, count, gap);
++}
+ 
+ /* Maximum wait after the scheduler starts: ~30 seconds. No retries that
+  * could reuse a boot nonce after a partial authentication handshake. */
+@@ -25,6 +46,20 @@
+         c->port < 1024u)
+         return -1;
+     if ((c->ir_pipeline == NULL) != (c->ir_config == NULL)) return -1;
++    /* A saved-code request must never be routed to a non-mounted journal.
++     * Reject a half-configured store rather than silently drop persistence. */
++    if (c->saved) {
++        if (!c->ir_pipeline || !c->ir_config || !c->store || !c->store_io ||
++            !c->store_io->read || !c->store_io->program ||
++            !c->store_io->erase_sector ||
++            c->store_io->region_size < gwir_fj_worst_case_rewrite_bytes() ||
++            c->store_io->region_size % GWIR_FJ_SECTOR ||
++            !c->pulse_scratch || c->pulse_capacity < GWIR_MAX_PULSES_PER_FRAME ||
++            !c->upload_scratch || c->upload_capacity < GWIR_GWCD_MAX_SIZE)
++            return -1;
++    } else if (c->store || c->store_io || c->pulse_scratch ||
++               c->pulse_capacity || c->upload_scratch || c->upload_capacity)
++        return -1;
+     boot_config = c;
+     return 0;
+ }
+@@ -48,23 +83,44 @@
+         /* Install functional IR HAL only if the board provided an audited
+          * port. Bind the RX pump to the *same* authenticated owner task. */
+         int ir_ready = 1;
++        int ir_initialized = 0;
+         if (c->ir_pipeline) {
+             if (gwir_ir_pipeline_init(c->ir_pipeline, c->engine, c->ir_config) != 0)
+                 ir_ready = 0;
+-            else if (gwir_sdk_auth_task_bind_ir_pipeline(c->ir_pipeline) != 0) {
+-                (void)gwir_ir_pipeline_stop(c->ir_pipeline);
++            else {
++                ir_initialized = 1;
++                if (gwir_sdk_auth_task_bind_ir_pipeline(c->ir_pipeline) != 0)
++                    ir_ready = 0;
++            }
++        }
++        /* Mount the board-approved journal and bind authenticated
++         * upload/delete/status/saved-play commands to the SAME IR pipeline.
++         * The flash adapter must already prove region ownership; this boot
++         * bridge cannot infer partition safety from an 8MiB chip ID. */
++        if (ir_ready && c->saved) {
++            if (verified_saved_ir(c->ir_pipeline) != 1 ||
++                gwir_fj_open(c->store, c->store_io) != 0)
+                 ir_ready = 0;
++            if (ir_ready) {
++                saved_ir_ops.ctx = c->ir_pipeline;
++                saved_ir_ops.board_ir_ready = verified_saved_ir;
++                saved_ir_ops.send_frame = transmit_saved_ir;
++                if (gwir_saved_play_init(c->saved, c->store, &saved_ir_ops,
++                        c->pulse_scratch, c->pulse_capacity) != 0 ||
++                    gwir_saved_play_enable_upload(c->saved,
++                        c->upload_scratch, c->upload_capacity) != 0)
++                    ir_ready = 0;
+             }
+         }
+         if (ir_ready) {
+             int started = gwir_sdk_secure_start(c->provider, c->owner,
+                 c->engine, c->saved, c->hmac, c->crypto_ctx, c->scratch,
+                 c->scratch_capacity, c->response, c->response_capacity, c->port);
+-            if (started != 0 && c->ir_pipeline) {
+-                (void)gwir_sdk_auth_task_bind_ir_pipeline(NULL);
+-                if (c->ir_pipeline->ready)
+-                    (void)gwir_ir_pipeline_stop(c->ir_pipeline);
+-            }
++            if (started != 0) ir_ready = 0;
++        }
++        if (!ir_ready && ir_initialized) {
++            (void)gwir_sdk_auth_task_bind_ir_pipeline(NULL);
++            (void)gwir_ir_pipeline_stop(c->ir_pipeline);
+         }
+     }
+     vTaskDelete(NULL);
