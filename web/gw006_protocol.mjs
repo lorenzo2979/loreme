@@ -98,13 +98,45 @@ function statusBitmap(payload) {
   if (payload.length!==13||payload[0]!==0) throw new Error("Storage not available");
   return Array.from({length:96},(_,i)=>!!(payload[1+(i>>3)]&(1<<(i&7))));
 }
+/* Exact GWCD v1 writer from pinned gwir_gwcd_store.c: 16-byte header,
+ * 1..5 TX-shaped frame records, CRC32 IEEE trailer. */
+function encodeGwcd(button,frames) {
+  if (!Number.isInteger(button)||button<0||button>=96||
+      !Array.isArray(frames)||frames.length<1||frames.length>5)
+    throw new RangeError("GWCD button/frame count");
+  let bytes=20;
+  for(const frame of frames) {
+    asBytes(frame);
+    if(frame.length<16) throw new RangeError("GWCD frame header");
+    const carrier=be32(frame,0), count=new DataView(frame.buffer,frame.byteOffset,frame.byteLength).getUint16(6,false),
+          duty=new DataView(frame.buffer,frame.byteOffset,frame.byteLength).getUint16(4,false),
+          gap=be32(frame,8);
+    if(carrier<25000||carrier>500000||duty<200||duty>500||
+       count<1||count>2048||gap>30000000||frame.length!==12+count*4)
+      throw new RangeError("GWCD frame limits");
+    for(let j=0;j<count;j++) {
+      const pulse=be32(frame,12+j*4);
+      if(pulse<1||pulse>30000000) throw new RangeError("GWCD pulse limits");
+    }
+    bytes+=frame.length;
+  }
+  if(bytes>41040)throw new RangeError("GWCD record too large");
+  const record=new Uint8Array(bytes);
+  record.set(te.encode("GWCD"),0);
+  put32(record,4,1);put32(record,8,button);put32(record,12,frames.length);
+  let offset=16;
+  for(const frame of frames){record.set(frame,offset);offset+=frame.length;}
+  put32(record,bytes-4,crc32(record.subarray(0,bytes-4),new Uint8Array(0)));
+  return record;
+}
+
 class GwirBrowserClient {
   constructor(fetcher,subtle,protocol) {
     if (!secureBrowserGate(protocol,subtle))
       throw new Error("HTTPS and WebCrypto required before credentials or IR access");
     if (typeof fetcher!=="function") throw new TypeError("fetcher");
     this.fetcher=fetcher; this.subtle=subtle; this.key=null;
-    this.nonce=null;this.tx=0n;this.rx=0n;this.seq=0;this.busy=false;
+    this.nonce=null;this.tx=0n;this.rx=0n;this.seq=0;this.busy=false;this.uploading=false;
   }
   async pair(keyHex,nonceHex) {
     if (this.busy||this.key) throw new Error("Already paired or busy");
@@ -113,8 +145,12 @@ class GwirBrowserClient {
     const key=await importKey(keyHex,this.subtle);
     this.key=key;this.nonce=nonce;this.tx=0n;this.rx=0n;this.seq=0;
   }
-  clear() { this.key=null;this.nonce=null;this.busy=false;this.tx=0n;this.rx=0n;this.seq=0; }
+  clear() { this.key=null;this.nonce=null;this.busy=false;this.uploading=false;this.tx=0n;this.rx=0n;this.seq=0; }
   async rpc(cmd,payload=new Uint8Array(0)) {
+    if(this.uploading) throw new Error("Storage transaction in progress");
+    return this._rpc(cmd,payload);
+  }
+  async _rpc(cmd,payload=new Uint8Array(0)) {
     if (!this.key||!this.nonce||this.busy) throw new Error("Unavailable or busy");
     if (this.tx>=0x7ffffffffffffffen||this.seq===0xffffffff)
       throw new Error("Counters exhausted: stop and securely reboot/re-pair");
@@ -162,6 +198,37 @@ class GwirBrowserClient {
       throw new Error("Delete not confirmed");
     return true;
   }
+  async saveCode(button, frames) {
+    if(this.uploading||this.busy||!this.key) throw new Error("Storage busy or unauthenticated");
+    const record=encodeGwcd(button,frames);
+    const check=(r,active,received)=>{
+      if(r.command!==WIRE.storeStatus||r.payload.length!==7||
+         r.payload[0]!==0||r.payload[1]!== (active?button:255) ||
+         r.payload[2]!==active||be32(r.payload,3)!==received)
+        throw new Error("Storage transaction not confirmed");
+    };
+    this.uploading=true;
+    try {
+      const begin=new Uint8Array(5);
+      begin[0]=button;put32(begin,1,record.length);
+      check(await this._rpc(WIRE.begin,begin),1,0);
+      const chunkMax=2048;
+      for(let off=0;off<record.length;off+=chunkMax) {
+        const chunk=record.subarray(off,Math.min(record.length,off+chunkMax));
+        const p=new Uint8Array(5+chunk.length);
+        p[0]=button;put32(p,1,off);p.set(chunk,5);
+        check(await this._rpc(WIRE.chunk,p),1,off+chunk.length);
+      }
+      check(await this._rpc(WIRE.commit,Uint8Array.of(button)),0,0);
+      const info=await this._rpc(WIRE.info);
+      if(info.command!==WIRE.infoReply||!statusBitmap(info.payload)[button])
+        throw new Error("Saved button missing from authenticated status");
+      return record.length;
+    }finally{
+      this.uploading=false;
+      record.fill(0);
+    }
+  }
   async arm() {
     const r=await this.rpc(WIRE.arm);
     if(r.command!==WIRE.status||r.payload[0]!==0)
@@ -191,4 +258,4 @@ class GwirBrowserClient {
   }
 }
 export {WIRE,cleanHex,crc32,encodeGwir,decodeGwir,secureBrowserGate,
-        importKey,signGwas,verifyGwas,statusBitmap,GwirBrowserClient};
+        importKey,signGwas,verifyGwas,statusBitmap,encodeGwcd,GwirBrowserClient};
