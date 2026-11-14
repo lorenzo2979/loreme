@@ -66,7 +66,7 @@ class TestMap(unittest.TestCase):
             backup=Path(tmp)/"chip.bin"
             # Synthetic 8 MiB, NOT physical GW006. Fill only reserved
             # boot/end sectors; leave the candidate genuinely erased.
-            synthetic = bytearray(b"\\xff" * (8 * 1024 * 1024))
+            synthetic = bytearray(bytes([0xFF]) * (8 * 1024 * 1024))
             synthetic[0] = 0x55
             synthetic[-1] = 0x11
             backup.write_bytes(synthetic)
