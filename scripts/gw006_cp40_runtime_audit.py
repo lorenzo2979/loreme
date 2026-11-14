@@ -10,6 +10,8 @@ src = Path('source_bundles/GW006_WBRG1_STORAGE_PORT_SOURCE_ONLY.zip')
 expected='1a97c5f571c85224ea5df923bbf114addb3acea8bf1b65cbf35f3d653c168044'
 assert hashlib.sha256(src.read_bytes()).hexdigest() == expected, 'source lock mismatch'
 targets = [
+ 'scripts/integrate_amebad_sdk.py',
+ 'scripts/verify_release_sources.py',
  'firmware/sdk/gwir_sdk_bootstrap.c',
  'firmware/sdk/gwir_sdk_bootstrap.h',
  'firmware/sdk/gwir_sdk_secure_start.c',
@@ -42,7 +44,7 @@ with ZipFile(src) as z:
             continue
         lines=z.read(name).decode('utf-8').splitlines()
         print('lines',len(lines))
-        if name.endswith('_bootstrap.c') or name.endswith('_bootstrap.h') or name.endswith('_secure_start.c') or name.endswith('_sta_dashboard.c') or name.endswith('gwir_dashboard_sta_server.c') or name.endswith('gwir_dashboard_http.c') or name.endswith('gwir_sdk_auth_task.c') or name.endswith('gwir_runtime_owner.h') or name.endswith('gwir_amebad_auth_server.c'):
+        if name.startswith('scripts/') or name.endswith('_bootstrap.c') or name.endswith('_bootstrap.h') or name.endswith('_secure_start.c') or name.endswith('_sta_dashboard.c') or name.endswith('gwir_dashboard_sta_server.c') or name.endswith('gwir_dashboard_http.c') or name.endswith('gwir_sdk_auth_task.c') or name.endswith('gwir_runtime_owner.h') or name.endswith('gwir_amebad_auth_server.c'):
             chunks=lines[:400]
         else:
             pat=re.compile(r'^(?:int|void|static |const |typedef |struct |\s*#include|\s*return |\s*if \(|.*(?:bind|init|start|poll|listen|serve|prepare|handle|http|wifi|auth|store|flash|board)\s*\()',re.I)
