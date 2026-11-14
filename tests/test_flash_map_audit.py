@@ -64,7 +64,12 @@ class TestMap(unittest.TestCase):
             d["layout_verified_on_real_board"]=False
             p.write_text(json.dumps(d))
             backup=Path(tmp)/"chip.bin"
-            backup.write_bytes(bytes(range(256))*32768)  # synthetic 8 MiB; NOT physical GW006
+            # Synthetic 8 MiB, NOT physical GW006. Fill only reserved
+            # boot/end sectors; leave the candidate genuinely erased.
+            synthetic = bytearray(b"\\xff" * (8 * 1024 * 1024))
+            synthetic[0] = 0x55
+            synthetic[-1] = 0x11
+            backup.write_bytes(synthetic)
             d["backup_sha256"] = hashlib.sha256(backup.read_bytes()).hexdigest()
             p.write_text(json.dumps(d))
             argv=[sys.executable,str(ROOT/"scripts/audit_gw006_flash_map.py"),str(p),"--backup",str(backup)]
@@ -76,6 +81,16 @@ class TestMap(unittest.TestCase):
             r=subprocess.run(argv,capture_output=True,text=True)
             self.assertEqual(r.returncode,0)
             self.assertEqual(json.loads(r.stdout)["result"], "LAYOUT_PLAUSIBLE_NO_WRITE_AUTHORIZATION")
+            # Even a correctly hashed backup and fully classified map must
+            # never permit erasing a sector containing existing OTA/data.
+            synthetic[0x300000] = 0xA5
+            backup.write_bytes(synthetic)
+            d["backup_sha256"] = hashlib.sha256(backup.read_bytes()).hexdigest()
+            p.write_text(json.dumps(d))
+            r = subprocess.run(argv, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 2)
+            self.assertIn("Partizione IR NON LIBERA", r.stdout)
+            self.assertIn("0x300000", r.stdout)
             d["backup_sha256"] = "0"*64
             p.write_text(json.dumps(d))
             r=subprocess.run(argv,capture_output=True,text=True)
