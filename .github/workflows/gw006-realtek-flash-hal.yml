@@ -159,7 +159,7 @@ jobs:
           if code.count(anchor)!=1 or 'GROUPS["core"].extend(' in code:
               raise SystemExit('Unexpected SDK integrator source')
           code=code.replace(anchor,
-              'GROUPS["core"].extend(["gwir_web_rpc.c", "gwir_web_http_post.c"])\\n\\n'+anchor,1)
+              'GROUPS["core"].extend(["gwir_web_rpc.c", "gwir_web_http_post.c"])\n\n'+anchor,1)
           source.write_text(code)
           print('45-source SDK and ELF audit updated, original release attested independently')
           PY
