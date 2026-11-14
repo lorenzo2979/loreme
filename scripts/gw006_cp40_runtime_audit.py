@@ -23,6 +23,14 @@ targets = [
  'firmware/core/gwir_apconfig_http.c',
  'firmware/core/gwir_apconfig_tcp_transport.c',
  'firmware/core/gwir_network_profile.c',
+ 'firmware/core/gwir_dashboard_http.c',
+ 'firmware/core/gwir_dashboard_http.h',
+ 'firmware/core/gwir_dashboard_asset.c',
+ 'firmware/core/gwir_sta_gate.c',
+ 'firmware/sdk/gwir_sdk_auth_task.c',
+ 'firmware/core/gwir_runtime_owner.h',
+ 'firmware/realtek/gwir_amebad_auth_server.c',
+ 'firmware/core/gwir_apconfig_http_stream.c',
 ]
 # Only source-code listings, no device secrets, dump contents or binary firmware.
 with ZipFile(src) as z:
@@ -34,7 +42,7 @@ with ZipFile(src) as z:
             continue
         lines=z.read(name).decode('utf-8').splitlines()
         print('lines',len(lines))
-        if name.endswith('_bootstrap.c') or name.endswith('_bootstrap.h') or name.endswith('_secure_start.c') or name.endswith('_sta_dashboard.c') or name.endswith('gwir_dashboard_sta_server.c'):
+        if name.endswith('_bootstrap.c') or name.endswith('_bootstrap.h') or name.endswith('_secure_start.c') or name.endswith('_sta_dashboard.c') or name.endswith('gwir_dashboard_sta_server.c') or name.endswith('gwir_dashboard_http.c') or name.endswith('gwir_sdk_auth_task.c') or name.endswith('gwir_runtime_owner.h') or name.endswith('gwir_amebad_auth_server.c'):
             chunks=lines[:400]
         else:
             pat=re.compile(r'^(?:int|void|static |const |typedef |struct |\s*#include|\s*return |\s*if \(|.*(?:bind|init|start|poll|listen|serve|prepare|handle|http|wifi|auth|store|flash|board)\s*\()',re.I)
