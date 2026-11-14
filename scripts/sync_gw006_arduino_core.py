@@ -34,6 +34,12 @@ def sync() -> None:
         work = Path(work)
         with ZipFile(ARCHIVE) as z:
             members = set(z.namelist())
+            flash_sources = {}
+            for suffix in (".c", ".h"):
+                name = "firmware/realtek/gwir_wbrg1_flash_port" + suffix
+                if name not in members:
+                    raise SystemExit("Pinned adapter missing: " + name)
+                flash_sources[suffix] = z.read(name).decode("utf-8")
             for module in COMPONENTS:
                 for suffix in (".c", ".h"):
                     name = "firmware/core/" + module + suffix
@@ -55,11 +61,21 @@ def sync() -> None:
                                      f"{result.stdout} {result.stderr}")
         apply_store_abort(work / "firmware/core")
         DEST.mkdir(parents=True, exist_ok=True)
+        # The official Realtek NOR adapter is part of the same pinned source.
+        # Copy it into the Arduino build with only its include path adapted.
+        # Runtime writes remain disabled unless an explicitly reviewed
+        # WBRG1-only partition is authorized (default=0).
+        for suffix in (".c", ".h"):
+            path = "firmware/realtek/gwir_wbrg1_flash_port" + suffix
+            source = flash_sources[suffix]
+            source = source.replace('#include "../core/gwir_flash_journal.h"',
+                                    '#include "gwir_flash_journal.h"')
+            (DEST / ("gwir_wbrg1_flash_port" + suffix)).write_text(source)
         for module in COMPONENTS:
             for suffix in (".c", ".h"):
                 source = work / "firmware/core" / (module + suffix)
                 (DEST / (module + suffix)).write_bytes(source.read_bytes())
-    print("GW006 Arduino: 9 exact patched C modules + 9 headers synchronized.")
+    print("GW006 Arduino: 9 patched C modules, 9 headers, NOR flash adapter synced.")
 
 
 if __name__ == "__main__":
