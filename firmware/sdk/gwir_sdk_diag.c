@@ -16,6 +16,7 @@
 #include "../realtek/gwir_amebad_rx_irq.h"
 #include "../realtek/gwir_amebad_bus.h"
 #include "../realtek/gwir_amebad_vendor_bus.h"
+#include "../realtek/gwir_amebad_board_pins.h"
 
 void gwir_sdk_integration_banner(void)
 {
@@ -95,5 +96,14 @@ int gwir_sdk_board_prepare(void)
         !cfg->store_io->read || !cfg->store_io->program ||
         !cfg->store_io->erase_sector || !cfg->pulse_scratch ||
         !cfg->upload_scratch) return -2;
+    /* Validate the *real linked* GW006 pin profile before registering any
+     * signed IR engine. This is only a logical pin-collision check; it does
+     * not prove electrical separation of the red LED on PA25, and it does
+     * NOT authorize the hardware, an IR IRQ, or any Flash access. */
+    {
+        gwir_board_pins pins = gwir_board_pins_candidate();
+        if (gwir_board_pins_validate(&pins) != 0)
+            return -3;
+    }
     return gwir_sdk_boot_register(cfg);
 }
