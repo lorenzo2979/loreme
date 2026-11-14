@@ -34,17 +34,20 @@ typedef struct {
     /* Drop staged profile, never erase original working profile. */
     void (*rollback)(void *ctx);
 } gwir_provision_ops;
-/* Parse exactly 'ssid=...&password=...' (either order) from HTTP form body.
- * Rejects duplicates, unknown fields, malformed escapes and control chars;
- * password is optional empty only for an open home AP. On failure, output wiped. */
+/* Legacy OPEN-AP HTTP parser: only non-secret configurations are allowed.
+ * A nonempty home Wi-Fi password is rejected because the open AP carries
+ * HTTP in cleartext. For WPA credentials, invoke parse_form_secure ONLY from
+ * a transport whose confidentiality and device identity were authenticated
+ * out of band. Empty password remains valid for an open home network.
+ * Rejects duplicates, unknown keys, bad escapes; wipes output on failure. */
 int gwir_provision_parse_form(const uint8_t *body, size_t length,
                               gwir_provision_profile *out);
 /* Extended form with ip_mode=dhcp|static, ip, mask, gateway, dns1,
  * optional dns2, duckdns=0|1, duckdns_host, duckdns_token.
  * trusted_secret_channel MUST be verified by the transport, not supplied
  * by the browser/form. An unprotected open-AP HTTP session MUST pass 0.
- * DuckDNS tokens cannot enter the device over unprotected provisioning.
- * Existing legacy SSID/password parser remains for backwards compatibility.
+ * Neither DuckDNS tokens nor nonempty home Wi-Fi passwords can enter
+ * through open-AP HTTP. The legacy parser only accepts public parameters.
  */
 int gwir_provision_parse_form_secure(const uint8_t *body, size_t length,
                                     gwir_provision_profile *out,
