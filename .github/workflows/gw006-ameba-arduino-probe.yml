@@ -1,0 +1,47 @@
+name: GW006 Realtek Ameba Arduino compile probe (NOT GW006 firmware)
+on:
+  push:
+    branches: [review/gw006-realtek-flash-hal]
+    paths:
+      - 'firmware/arduino/**'
+      - '.github/workflows/gw006-ameba-arduino-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  arduino-probe:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install official Realtek AmebaD Arduino 3.1.9 (not GW006 board)
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://raw.githubusercontent.com/Ameba-AIoT/ameba-arduino-d/master/Arduino_package/package_realtek_amebad_index.json'
+          arduino-cli core update-index --additional-urls "$URL"
+          arduino-cli core install realtek:AmebaD@3.1.9 --additional-urls "$URL"
+          arduino-cli board listall realtek:AmebaD
+      - name: Compile and link official RTL8721DM family API probe, do not flash
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/gw006-ameba-arduino
+          arduino-cli compile \
+            --fqbn 'realtek:AmebaD:SparkFun_ThingPlus-AWCU488' \
+            --build-path build/gw006-ameba-arduino \
+            --verbose \
+            firmware/arduino/GW006_Ameba_Probe \
+            2>&1 | tee build/gw006-ameba-arduino/build.log
+          grep -q 'gw006_amebad_link_only_probe' \
+            firmware/arduino/GW006_Ameba_Probe/GW006_Ameba_Probe.ino
+          echo 'AMEBAD_ARDUINO_FAMILY_COMPILE=PASS; WBRG1_BOARD_SUPPORT=NOT_VERIFIED; NO_FLASH'
+      - name: Preserve build diagnostics only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-amebad-arduino-awcu488-diagnostic-only
+          path: build/gw006-ameba-arduino/build.log
+          if-no-files-found: warn
+          retention-days: 7
