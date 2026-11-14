@@ -28,6 +28,10 @@ REALTEK_IR_COMPONENTS = (
     "gwir_amebad_tx_codec", "gwir_amebad_tx_fifo",
     "gwir_amebad_tx_vendor", "gwir_amebad_vendor_bus", "gwir_ir_pipeline",
 )
+APCONFIG_COMPONENTS = (
+    "gwir_apconfig_button", "gwir_apconfig_session",
+    "gwir_apconfig_controller",
+)
 PATCHES = (
     "gw006_authenticated_storage_protocol.patch",
     "gw006_authenticated_store_implementation.patch",
@@ -103,7 +107,15 @@ def sync() -> None:
             for suffix in (".c", ".h"):
                 source = work / "firmware/core" / (module + suffix)
                 (DEST / (module + suffix)).write_bytes(source.read_bytes())
-    print("GW006 Arduino: 10 core modules + 10 native Realtek IR drivers + NOR adapter synced.")
+    # Wire the host-reviewed PB23 button -> bounded APConfig session
+    # controller into the native image. All board approval gates remain OFF.
+    for component in APCONFIG_COMPONENTS:
+        for suffix in (".c", ".h"):
+            src = ROOT / "firmware/core" / (component + suffix)
+            if not src.is_file():
+                raise SystemExit("Missing tracked APConfig controller source: " + str(src))
+            (DEST / src.name).write_bytes(src.read_bytes())
+    print("GW006 Arduino: 10 core + 10 Realtek IR + NOR + 3 APConfig controller modules synced.")
 
 
 if __name__ == "__main__":
