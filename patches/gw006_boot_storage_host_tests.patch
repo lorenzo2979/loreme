@@ -159,3 +159,4 @@
 +        assert(delete_count == 1);
      } else if (!strcmp(argv[1],"offline")) {
          connected_after=-1;
+         assert(gwir_sdk_boot_register(&config)==0);
