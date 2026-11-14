@@ -1,10 +1,14 @@
-name: GW018-DM reference native KM0 KM4 build (NOT FOR GW006 FLASH)
+name: GW006 IR engine on GW018-DM native KM0 KM4 (NO FLASH)
 on:
   workflow_dispatch:
   push:
     branches: [review/gw006-realtek-flash-hal]
     paths:
       - '.github/workflows/gw018-dm-reference-compile.yml'
+      - 'scripts/integrate_gw018_reference_ir.py'
+      - 'firmware/sdk/gwir_gw018_ir_boot.c'
+      - 'firmware/core/**'
+      - 'firmware/realtek/**'
 permissions:
   contents: read
 
@@ -55,6 +59,15 @@ jobs:
           test -x "$root/project_lp/asdk/gnu_utility/prepend_header.sh"
           test -x "$root/project_hp/asdk/gnu_utility/prepend_header.sh"
 
+      - name: Integrate actual GWIR raw IR engine at KM4 boot
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/integrate_gw018_reference_ir.py --sdk gw018-reference
+          grep -F 'gwir_gw018_ir_boot_prepare();' gw018-reference/project/realtek_amebaD_va0_example/src/src_hp/main.c
+          grep -F 'gwir_amebad_vendor_bus.c' gw018-reference/project/realtek_amebaD_va0_example/src/src_hp/Makefile
+          grep -F '#define CONFIG_EXAMPLE_SOCKET_TCP_TRX' gw018-reference/project/realtek_amebaD_va0_example/inc/inc_hp/platform_opts.h
+
       - name: Build KM0 low-power core
         shell: bash
         run: |
@@ -79,6 +92,23 @@ jobs:
           echo 'GW018_KM4_BUILD=PASS'
           tail -25 "$GITHUB_WORKSPACE/gw018-km4.log"
 
+      - name: Gate the REAL final KM4 ELF on linked IR boot, capture and TX
+        shell: bash
+        run: |
+          set -euo pipefail
+          elf="gw018-reference/project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk/image/target_img2.axf"
+          test -s "$elf"
+          tool="gw018-reference/project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/toolchain/linux/asdk-6.4.1/linux/newlib/bin/arm-none-eabi-nm"
+          test -x "$tool"
+          "$tool" --defined-only "$elf" > gw018-km4-linked-symbols.txt
+          for symbol in gwir_gw018_ir_boot_prepare gwir_engine_process gwir_amebad_rx_worker_step gwir_amebad_bus_start_tx gwir_amebad_vendor_bus_ops; do
+            if ! grep -Eq "[[:space:]][Tt][[:space:]]+$symbol$" gw018-km4-linked-symbols.txt; then
+              echo "GW006_NATIVE_IR_LINK_GATE=FAIL: $symbol absent from FINAL KM4 ELF"
+              exit 1
+            fi
+          done
+          echo 'GW006_NATIVE_IR_LINK_GATE=PASS (no hardware, auth, flash or APConfig runtime certification)'
+
       - name: Verify output images and produce SHA256 manifest
         shell: bash
         run: |
@@ -98,11 +128,15 @@ jobs:
           manifest={
              'source_repository':'jasperw1996/ambd_sdk_GW018-DM',
              'source_commit':os.environ['GW018_SOURCE_SHA'],
-             'reference_target':'GW018-DM WBRG1 RTL8721CSM',
+             'reference_target':'GW018-DM WBRG1 RTL8721CSM, with GW006 IR engine boot bridge',
+             'native_ir_link_gate':'required and passed before artifact packaging',
+             'native_ir_hardware_enabled':False,
+             'authenticated_web_ui_operational':False,
+             'persistent_96_key_storage_operational':False,
              'installed_on_a_real_device':False,
              'certified_for_GW006':False,
              'safe_to_flash_on_GW006':False,
-             'important':'Reference build only. GW018 GPIO/UART/boot/flash layout may differ from GW006.',
+             'important':'IR core integrated at KM4 boot; no GW006 hardware activation or complete web/auth/storage product yet.',
              'images':[]
           }
           for where,name in sources:
@@ -114,7 +148,7 @@ jobs:
               manifest['images'].append({'file':name,'bytes':len(raw),'sha256':sha256(raw).hexdigest()})
           (out/'BUILD_EVIDENCE.json').write_text(json.dumps(manifest,indent=2)+'\n')
           (out/'NON_FLASHARE_SU_GW006.txt').write_text(
-              'Only GW018-DM reference images. Not an IR Universal GW006 firmware. '
+              'GW006 IR engine integrated into GW018 reference boot, NO product release. '
               'Do not install on GW006; no HW testing or flash map validation.\n')
           print(json.dumps(manifest,indent=2))
           PY
@@ -123,10 +157,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: gw018-dm-native-build-reference-DO-NOT-FLASH-GW006
+          name: gw006-ir-on-gw018-native-reference-DO-NOT-FLASH
           path: |
             gw018-km0.log
             gw018-km4.log
+            gw018-km4-linked-symbols.txt
             gw018-reference-build-evidence/
           retention-days: 14
           if-no-files-found: warn
