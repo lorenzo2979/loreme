@@ -47,7 +47,10 @@ void gw006_amebad_link_only_probe(void) {
 /* Real GWIR v3 parser and IR engine exercised on-device, with no IR HW
  * connected. Use a static object: the five-frame IR queue is too large
  * for the limited FreeRTOS task stack. */
-static gwir_engine s_gwir_engine;
+/* The RTL8721D PSRAM linker section is provided by the official AmebaD
+ * board package. Keep the ~50KB five-frame RX engine out of the limited
+ * KM4 SRAM BSS; never allocate it on a FreeRTOS task stack. */
+static gwir_engine s_gwir_engine __attribute__((section(".psram.bss")));
 static Gw006AmebaAuthenticatedTcp s_signed_tcp;
 static bool gw006_core_selftest(void) {
     uint8_t request[GWIR_HEADER_SIZE], response[GWIR_HEADER_SIZE];
