@@ -12,6 +12,8 @@ on:
       - 'firmware/sdk/gwir_sdk_diag.c'
       - 'scripts/verify_gw006_product_link.py'
       - 'tests/test_gw006_product_link.py'
+      - 'scripts/configure_gw006_ota_layout.py'
+      - 'tests/test_configure_gw006_ota_layout.py'
       - 'firmware/sdk/gwir_sdk_apconfig_port.c'
       - 'firmware/sdk/gwir_sdk_apconfig_port.h'
       - 'firmware/sdk/gwir_sdk_provisioned_identity.c'
@@ -336,6 +338,19 @@ jobs:
             git -C "$RUNNER_TEMP/ameba-rtos-d" checkout --detach FETCH_HEAD
           fi
           test "$(git -C "$RUNNER_TEMP/ameba-rtos-d" rev-parse HEAD)" = "$sdk_sha"
+      - name: Align native OTA2 build address with original GW006 8MiB flash dump (NO FLASH)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/test_configure_gw006_ota_layout.py
+          sdk="$RUNNER_TEMP/ameba-rtos-d"
+          # The real backup has valid IMG2 sections at 0x006000 and 0x286000.
+          # SDK default OTA2 is 0x106000, which is NOT the GW006 OTA2 slot.
+          # This modifies only the disposable SDK checkout, never the chip.
+          python3 scripts/configure_gw006_ota_layout.py --sdk "$sdk" --apply
+          grep -F '0x08286000' "$sdk/component/soc/realtek/amebad/fwlib/usrcfg/rtl8721d_bootcfg.c"
+          grep -F '0x08286000' "$sdk/component/soc/realtek/amebad/fwlib/include/rtl8721d_ota.h"
+          echo 'GW006_OBSERVED_OTA2_08286000_BUILD_CONFIG=PASS; HARDWARE_UNVERIFIED; NO_FLASH'
       - name: Integrate all 46 firmware C sources into the actual vendor SDK
         shell: bash
         run: |
