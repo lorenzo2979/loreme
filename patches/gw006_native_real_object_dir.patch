@@ -1,6 +1,6 @@
 --- a/scripts/verify_native_km4_objects.py
 +++ b/scripts/verify_native_km4_objects.py
-@@ -20,7 +20,7 @@
+@@ -20,6 +20,6 @@
  VENDOR_MAKE = SDK_PROJECT / 'src/src_hp/Makefile'
  VENDOR_C = SDK_PROJECT / 'src/gwir_sdk'
 -OBJECT_ROOT = SDK_PROJECT / 'src/src_hp'
