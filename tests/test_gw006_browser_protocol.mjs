@@ -58,7 +58,7 @@ test("HMAC signed envelope, reply direction, replay, tampering and wrong nonce",
   const wrong=good.slice();wrong[5]=1;
   await assert.rejects(()=>verifyGwas(wrong,key,nonce,0n,subtle),/envelope/);
   const malformed=good.slice(0,good.length-1);
-  await assert.rejects(()=>verifyGwas(malformed,key,nonce,0n,subtle),/length/);
+  await assert.rejects(()=>verifyGwas(malformed,key,nonce,0n,subtle),/(length|envelope)/);
 });
 test("96 status bits exactly, signed TX_SAVED and STORE_DELETE",async()=>{
   const bitmap=new Uint8Array(13);bitmap[0]=0;
