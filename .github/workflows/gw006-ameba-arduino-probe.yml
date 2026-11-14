@@ -1,4 +1,4 @@
-name: GW006 Ameba Arduino integrated auth IR NOR build - board not verified
+name: GW006 Realtek RTL8721CSM-family AMB21/AMB22 integrated build - NO FLASH
 on:
   push:
     branches: [review/gw006-realtek-flash-hal]
@@ -47,13 +47,13 @@ jobs:
           URL='https://raw.githubusercontent.com/Ameba-AIoT/ameba-arduino-d/master/Arduino_package/package_realtek_amebad_index.json'
           arduino-cli core update-index --additional-urls "$URL"
           arduino-cli core install realtek:AmebaD@3.1.9 --additional-urls "$URL"
-      - name: Build official RTL8721DM reference only - not a WBRG1 image
+      - name: Build AMB21/AMB22 RTL8722CSM sibling reference for WBRG1 RTL8721CSM - NO FLASH
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/gw006-ameba-arduino
           arduino-cli compile \
-            --fqbn 'realtek:AmebaD:SparkFun_ThingPlus-AWCU488' \
+            --fqbn 'realtek:AmebaD:Ameba_AMB21_AMB22' \
             --build-path build/gw006-ameba-arduino \
             --verbose \
             firmware/arduino/GW006_Ameba_Probe \
@@ -107,7 +107,7 @@ jobs:
           assert len(binaries)==3
           manifest={
            'status':'EXPERIMENTAL HARDWARE BRINGUP, NOT VERIFIED GW006',
-           'source':'realtek:AmebaD 3.1.9, FQBN SparkFun_ThingPlus-AWCU488 RTL8721DM',
+           'source':'realtek:AmebaD 3.1.9, FQBN Ameba_AMB21_AMB22 RTL8722CSM WBRG1-family reference',
            'chip_target_to_be_verified':'WBRG1 RTL8721CSM',
            'user_firmware':'GW006 IR Universal',
            'commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
@@ -116,7 +116,7 @@ jobs:
           (dest/'MANIFEST.json').write_text(json.dumps(manifest,indent=2)+'\n')
           (dest/'READ_ME_FIRST.txt').write_text(
             'GW006 EXPERIMENTAL AMEBAD REFERENCE IMAGES\n'
-            'NOT confirmed compatible with physical GW006/WBRG1 bootloader.\n'
+            'Compiled against WBRG1-family RTL8722CSM reference; NOT boot-tested on this specific GW006.\n'
             'Do not erase flash or program images without confirming UART recovery, '
             'boot headers and image addresses on this board.\n'
             'At present boot provisioning, physical IR, and NOR writing remain disabled.\n'
