@@ -19,6 +19,9 @@ extern "C" {
 #include "src/gwir_engine.h" // actual shared C engine compiled under src/
 #include "src/gwir_runtime_owner.h" // signed GWAS, persistent 96-button NOR journal
 #include "src/gwir_wbrg1_flash_port.h" // bounded 8MiB NOR adapter (inactive until approved)
+#include "src/gwir_amebad_board_pins.h"
+#include "src/gwir_amebad_vendor_bus.h"
+#include "src/gwir_ir_pipeline.h"
 }
 
 static constexpr unsigned int kTVButtons = 36u;
@@ -54,6 +57,15 @@ void gw006_amebad_link_only_probe(void) {
  * KM4 SRAM BSS; never allocate it on a FreeRTOS task stack. */
 static gwir_engine s_gwir_engine __attribute__((section(".psram.bss")));
 static Gw006AmebaAuthenticatedTcp s_signed_tcp;
+/* Real 21-module native IR HAL: check only metadata and fail-closed
+ * hardware state. No GPIO pinmux or IRQ is activated by this test. */
+static bool gw006_native_ir_contract_selftest(void) {
+    gwir_board_pins pins = gwir_board_pins_candidate();
+    gwir_amebad_bus_ops ops = gwir_amebad_vendor_bus_ops();
+    return gwir_board_pins_validate(&pins) == 0 &&
+           ops.board_ir_ready && ops.board_ir_ready(ops.ctx) == 0 &&
+           gwir_ir_pipeline_init(nullptr, nullptr, nullptr) == -1;
+}
 static bool gw006_core_selftest(void) {
     uint8_t request[GWIR_HEADER_SIZE], response[GWIR_HEADER_SIZE];
     size_t request_len = 0u, response_len = 0u;
@@ -109,6 +121,9 @@ void setup() {
     Serial.println(gw006_core_selftest()
                    ? "GW006 REAL C PROTOCOL + IR ENGINE PING PASS"
                    : "GW006 REAL C PROTOCOL/IR ENGINE SELFTEST FAILED");
+    Serial.println(gw006_native_ir_contract_selftest()
+                   ? "GW006 NATIVE IR RX/TX PIPELINE LINKED; PINMUX REMAINS OFF"
+                   : "GW006 NATIVE IR PIPELINE CONTRACT FAILED");
     Serial.println(gw006_store_auth_contracts_selftest()
                    ? "GW006 NINE CORE MODULES: AUTH + 96-KEY NOR JOURNAL CONTRACTS PASS"
                    : "GW006 AUTH/JOURNAL SOURCE CONTRACT TEST FAILED");
