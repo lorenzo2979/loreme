@@ -13,7 +13,7 @@
 +                     decoded.command <= GWIR_STORE_ABORT))) {
 --- a/firmware/core/gwir_saved_play_command.c
 +++ b/firmware/core/gwir_saved_play_command.c
-@@ -139,1 +139,14 @@
+@@ -139,1 +139,13 @@
 -    case GWIR_STORE_DELETE:
 +    case GWIR_STORE_ABORT:
 +        /* The only recovery from interrupted BEGIN/CHUNK, without reboot.
