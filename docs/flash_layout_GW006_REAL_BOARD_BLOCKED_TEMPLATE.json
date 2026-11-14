@@ -1,0 +1,13 @@
+{
+  "board": "RSH-GW006",
+  "module": "WBRG1",
+  "flash_bytes": 8388608,
+  "layout_verified_on_real_board": false,
+  "backup_sha256": "NON_VERIFICATO_NON_INSERIRE_HASH_INVENTATI",
+  "evidence_note": "BLOCCATO: nessun layout partizioni certificato dalla scheda reale e nessun recupero collaudato.",
+  "reserved": [],
+  "candidate": {
+    "offset": 0,
+    "size": 0
+  }
+}
