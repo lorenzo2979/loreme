@@ -45,6 +45,16 @@ jobs:
           test -f gw018-reference/project/realtek_ameD_va0_example/src/src_lp/Makefile || \
             test -f gw018-reference/project/realtek_amebaD_va0_example/src/src_lp/Makefile
 
+      - name: Restore missing executable bits in vendor SDK scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="gw018-reference/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          find "$root" -type f -name '*.sh' -exec chmod u+x {} +
+          find "$root" -type f -path '*/gnu_utility/*' -exec chmod u+x {} +
+          test -x "$root/project_lp/asdk/gnu_utility/prepend_header.sh"
+          test -x "$root/project_hp/asdk/gnu_utility/prepend_header.sh"
+
       - name: Build KM0 low-power core
         shell: bash
         run: |
