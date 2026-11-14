@@ -22,6 +22,45 @@ static void test_parse(void) {
     s="ssid=X&password=x%2Btest%21ok";
     assert(gwir_provision_parse_form((const uint8_t *)s,strlen(s),&p)==0);
     assert(strcmp(p.password,"x+test!ok")==0);
+    /* Full APConfig profile: preserve home Wi-Fi password, static STA
+     * routing, and require an independently verified channel for DDNS token. */
+    s="ssid=My+Router&password=12345678&ip_mode=static&ip=192.168.1.87"
+      "&mask=255.255.255.0&gateway=192.168.1.1&dns1=1.1.1.1&dns2=8.8.8.8";
+    assert(gwir_provision_parse_form((const uint8_t *)s,strlen(s),&p)==0);
+    assert(p.use_dhcp==0 && !p.duckdns_enabled);
+    assert(strcmp(p.ipv4,"192.168.1.87")==0);
+    assert(strcmp(p.dns2,"8.8.8.8")==0);
+    s="ssid=My+Router&password=12345678&ip_mode=dhcp&duckdns=1"
+      "&duckdns_host=gwir-test.duckdns.org&duckdns_token=0123456789abcdef";
+    assert(gwir_provision_parse_form((const uint8_t *)s,strlen(s),&p)!=0);
+    assert(p.duckdns_token[0]==0 && p.ssid[0]==0);
+    assert(gwir_provision_parse_form_secure((const uint8_t *)s,strlen(s),&p,1)==0);
+    assert(p.use_dhcp==1 && p.duckdns_enabled && p.secure_transport_verified);
+    assert(strcmp(p.duckdns_host,"gwir-test.duckdns.org")==0);
+    assert(strcmp(p.duckdns_token,"0123456789abcdef")==0);
+    const char *badnetwork[]={
+        "ssid=X&password=&ip_mode=static&ip=192.168.4.3&mask=255.255.255.0&gateway=192.168.4.1&dns1=1.1.1.1",
+        "ssid=X&password=&ip_mode=static&ip=192.168.1.1&mask=255.0.255.0&gateway=192.168.1.2&dns1=1.1.1.1",
+        "ssid=X&password=&ip_mode=static&ip=192.168.1.0&mask=255.255.255.0&gateway=192.168.1.1&dns1=1.1.1.1",
+        "ssid=X&password=&ip_mode=static&ip=192.168.1.3&mask=255.255.255.0&gateway=192.168.2.1&dns1=1.1.1.1",
+        "ssid=X&password=&ip_mode=dhcp&ip=192.168.1.3",
+        "ssid=X&password=&ip_mode=sttic",
+        "ssid=X&password=&duckdns=1&duckdns_host=x.duckdns.org&duckdns_token=abcdefghi&duckdns_token=abc",
+        "ssid=X&password=&duckdns=1&duckdns_host=x.evil.org&duckdns_token=0123456789",
+        "ssid=X&password=&duckdns=1&duckdns_host=x.duckdns.org&duckdns_token=%0aABCDEFGHIJK",
+        "ssid=X&password=&duckdns=1&duckdns_host=x.duckdns.org&duckdns_token=short",
+        "ssid=X&password=&duckdns=1&duckdns_host=x.duckdns.org",
+        "ssid=X&password=&duckdns_host=x.duckdns.org",
+        "ssid=X&password=&ip_mode=static&ip=192.168.1.50&mask=255.255.255.0&gateway=192.168.1.50&dns1=1.1.1.1",
+        "ssid=X&password=&ip_mode=static&ip=192.168.1.50&mask=255.255.255.0&gateway=192.168.1.1&dns1=0.0.0.0"
+    };
+    for (size_t i=0;i<sizeof(badnetwork)/sizeof(badnetwork[0]);++i) {
+        memset(&p,0x51,sizeof(p));
+        assert(gwir_provision_parse_form_secure(
+              (const uint8_t*)badnetwork[i],strlen(badnetwork[i]),&p,1)!=0);
+        const uint8_t *bytes=(const uint8_t*)&p;
+        for (size_t j=0;j<sizeof(p);++j) assert(bytes[j]==0);
+    }
     const char *bad[]={"ssid=X","password=12345678","ssid=X&password=a",
         "ssid=X&password=12345678&ssid=Y","ssid=X&password=12345678&foo=1",
         "ssid=X&password=12345678&","ssid=X&password=%00AAAAAAA",
@@ -55,4 +94,4 @@ static void test_apply(void) {
     assert(gwir_provision_apply(&p,NULL)==-1);
     gwir_provision_wipe(&p);for(size_t i=0;i<sizeof(p);++i) assert(((uint8_t*)&p)[i]==0);
 }
-int main(void){test_parse();test_apply();puts("PASS: APConfig form strict decoding, credentials staged/verified/committed, rollback on errors");}
+int main(void){test_parse();test_apply();puts("PASS: APConfig WiFi, DHCP/static IPv4, protected DuckDNS, rollback and secret wiping");}
