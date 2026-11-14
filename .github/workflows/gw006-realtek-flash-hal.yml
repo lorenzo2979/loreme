@@ -220,6 +220,17 @@ jobs:
             firmware/sdk/gwir_sdk_diag.c tests/test_gw006_product_boot.c \
             -Wl,--gc-sections -o build/test_gw006_product_boot
           ./build/test_gw006_product_boot
+          # The reviewed real-object-dir change moved synthetic object
+          # fixtures under asdk/build/ram. The fixture must make its parent.
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tests/test_native_km4_objects.py')
+          old='    data_obj = sdk / OBJECT_ROOT / \'asset_data_only_probe.o\''
+          new=old+'\n    data_obj.parent.mkdir(parents=True, exist_ok=True)'
+          text=p.read_text()
+          if text.count(old)!=1: raise SystemExit('Unexpected native fixture')
+          p.write_text(text.replace(old,new,1))
+          PY
           python3 tests/test_source_manifest.py
           python3 tests/test_native_km4_objects.py
           python3 tests/test_native_km4_link_map.py
