@@ -99,7 +99,11 @@ int gwir_gw018_ir_boot_prepare(void)
     if (gwir_amebad_rx_irq_bind(&ir_irq_queue,30000u,&ir_stats) != 0)
         return -3;
     if (local_protocol_probe() != 0) return -4;
-    /* No TX or RX GPIO is enabled by boot. This task just handles the queue. */
+    /* A default GW018/WBRG1 image is not authorized for GW006 IR pins.
+     * Do NOT start RX worker: its queue lock touches the hardware IRQ mask.
+     * The driver code stays present in the native ELF for a future validated
+     * board port to authorize and launch. */
+    if (ops.board_ir_ready(ops.ctx) != 1) return 0;
     if (xTaskCreate(ir_worker_task, "GWIR-IR", 1024u, NULL,
                     tskIDLE_PRIORITY+2u,NULL) != pdPASS)
         return -5;
