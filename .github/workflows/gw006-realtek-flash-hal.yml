@@ -171,6 +171,18 @@ jobs:
       - name: Record native build start for fresh link evidence
         shell: bash
         run: touch "$RUNNER_TEMP/gwir_native_started"
+      - name: Enable Realtek IR PA25 PA26 SDK API compilation (NOT hardware enable)
+        shell: bash
+        run: |
+          set -euo pipefail
+          hp="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          grep -q '# >>> GWIR_REV9_START' "$hp"
+          # Validates actual vendor Pinmux_Config, InterruptRegister/En/Dis
+          # and IR_INTConfig against the pinned AmebaD SDK, while
+          # board_ir_setup is NOT called and no board GPIO is activated.
+          sed -i '/# >>> GWIR_REV9_START/a MODULE_IFLAGS += -DGWIR_GW006_IR_BENCH_OPT_IN=1' "$hp"
+          grep -F 'GWIR_GW006_IR_BENCH_OPT_IN=1' "$hp"
+          echo "VENDOR_IR_PA25_PA26_API_COMPILE_ENABLED=1; NO BOARD BOOT CONFIG"
       - name: Native KM0 build
         shell: bash
         run: |
