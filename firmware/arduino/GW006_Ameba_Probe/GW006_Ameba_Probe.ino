@@ -13,7 +13,9 @@
 #include <WiFi.h>
 #include <IRDevice.h>
 #include <FlashMemory.h>
+extern "C" {
 #include "src/gwir_engine.h" // actual shared C engine compiled under src/
+}
 
 static constexpr unsigned int kTVButtons = 36u;
 static constexpr unsigned int kClimateButtons = 14u;
