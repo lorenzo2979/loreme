@@ -23,7 +23,7 @@ button[disabled]{opacity:.52;cursor:not-allowed}.tab{font-size:.82rem;padding:8p
 .key .dot{position:absolute;right:6px;top:6px;width:7px;height:7px;background:#728296;border-radius:100%}
 .key .dot.saved{background:var(--green);box-shadow:0 0 8px #52d8a377}
 .key:active{background:#385c83}input{background:#0b1625;color:var(--ink);border:1px solid var(--stroke);padding:12px;border-radius:9px;width:100%;min-width:0}
-label{display:block;margin:11px 0 3px;font-size:.84rem;color:var(--sub)}.action{padding:9px 15px}.primary{background:#225994;border-color:#6bb0f5}
+label{display:block;margin:11px 0 3px;font-size:.84rem;color:var(--sub)}.action{padding:9px 15px}.buttonRow{margin-top:12px}.primary{background:#225994;border-color:#6bb0f5}
 .muted{color:var(--sub)}small{font-size:.76rem}#msg{min-height:25px;font-size:.88rem;line-height:1.5;margin:10px 2px}
 dialog{background:#182435;color:var(--ink);border:1px solid #6488b1;border-radius:16px;width:min(420px,calc(100% - 24px));padding:20px}
 dialog::backdrop{background:#000b}.menuActions{display:grid;gap:10px}#preview{white-space:pre-wrap;font-size:.84rem;color:var(--sub);margin-top:8px}
@@ -49,7 +49,7 @@ dialog::backdrop{background:#000b}.menuActions{display:grid;gap:10px}#preview{wh
 <input id="key" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="Chiave HMAC" disabled>
 <label for="nonce">Nonce di avvio verificato (32 caratteri esadecimali)</label>
 <input id="nonce" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="Nonce per questa accensione" disabled>
-<div class="row" style="margin-top:12px">
+<div class="row buttonRow">
 <button id="pair" class="action primary" disabled>Autentica</button>
 <button id="refresh" class="action" disabled>Aggiorna memoria</button>
 <button id="disconnect" class="action" disabled>Disconnetti</button>
