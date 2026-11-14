@@ -20,6 +20,13 @@ COMPONENTS = (
     "gwir_protocol", "gwir_engine", "gwir_gwcd_store",
     "gwir_flash_journal", "gwir_saved_play_command", "gwir_auth",
     "gwir_auth_dispatch", "gwir_auth_stream", "gwir_runtime_owner",
+    "gwir_capture_builder",
+)
+REALTEK_IR_COMPONENTS = (
+    "gwir_amebad_board_pins", "gwir_amebad_bus", "gwir_amebad_rx_fifo",
+    "gwir_amebad_rx_irq", "gwir_amebad_rx_vendor",
+    "gwir_amebad_tx_codec", "gwir_amebad_tx_fifo",
+    "gwir_amebad_tx_vendor", "gwir_amebad_vendor_bus", "gwir_ir_pipeline",
 )
 PATCHES = (
     "gw006_authenticated_storage_protocol.patch",
@@ -35,6 +42,13 @@ def sync() -> None:
         with ZipFile(ARCHIVE) as z:
             members = set(z.namelist())
             flash_sources = {}
+            realtek_ir_sources = {}
+            for component in REALTEK_IR_COMPONENTS:
+                for suffix in (".c", ".h"):
+                    name = "firmware/realtek/" + component + suffix
+                    if name not in members:
+                        raise SystemExit("Missing pinned IR source: " + name)
+                    realtek_ir_sources[component + suffix] = z.read(name).decode("utf-8")
             for suffix in (".c", ".h"):
                 name = "firmware/realtek/gwir_wbrg1_flash_port" + suffix
                 if name not in members:
@@ -71,11 +85,17 @@ def sync() -> None:
             source = source.replace('#include "../core/gwir_flash_journal.h"',
                                     '#include "gwir_flash_journal.h"')
             (DEST / ("gwir_wbrg1_flash_port" + suffix)).write_text(source)
+        for name, source in realtek_ir_sources.items():
+            source = source.replace('#include "../core/gwir_protocol.h"',
+                                    '#include "gwir_protocol.h"')
+            source = source.replace('#include "../core/gwir_capture_builder.h"',
+                                    '#include "gwir_capture_builder.h"')
+            (DEST / name).write_text(source)
         for module in COMPONENTS:
             for suffix in (".c", ".h"):
                 source = work / "firmware/core" / (module + suffix)
                 (DEST / (module + suffix)).write_bytes(source.read_bytes())
-    print("GW006 Arduino: 9 patched C modules, 9 headers, NOR flash adapter synced.")
+    print("GW006 Arduino: 10 core modules + 10 native Realtek IR drivers + NOR adapter synced.")
 
 
 if __name__ == "__main__":
