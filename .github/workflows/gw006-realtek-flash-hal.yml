@@ -5,6 +5,10 @@ on:
     paths:
       - '.github/workflows/gw006-realtek-flash-hal.yml'
       - 'source_bundles/GW006_WBRG1_STORAGE_PORT_SOURCE_ONLY.zip'
+      - 'firmware/realtek/gwir_amebad_vendor_bus.c'
+      - 'firmware/realtek/gwir_amebad_vendor_bus.h'
+      - 'tests/stubs/gwir_ir_board_test_shim.h'
+      - 'tests/test_vendor_ir_board.c'
   workflow_dispatch:
 permissions:
   contents: read
@@ -106,6 +110,27 @@ jobs:
             ./build/test_sdk_bootstrap "$mode"
           done
           echo 'GW006_AUTHENTICATED_FLASH_IR_BOOT_HOST_TESTS=PASS'
+      - name: Integrate selected PA25 TX and PA26 RX Realtek IRQ driver; bench-only tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Source bundle manifest was checked above; replace only the board
+          # adapter with the separately reviewed file in this branch.
+          git show HEAD:firmware/realtek/gwir_amebad_vendor_bus.c > firmware/realtek/gwir_amebad_vendor_bus.c
+          git show HEAD:firmware/realtek/gwir_amebad_vendor_bus.h > firmware/realtek/gwir_amebad_vendor_bus.h
+          mkdir -p build
+          for opt in 0 1; do
+            cc -std=c11 -Wall -Wextra -Werror \
+              -DGWIR_GW006_IR_BENCH_OPT_IN="$opt" \
+              -include tests/stubs/gwir_ir_board_test_shim.h \
+              -Itests/stubs -Ifirmware/realtek \
+              firmware/realtek/gwir_amebad_vendor_bus.c \
+              tests/test_vendor_ir_board.c \
+              -o "build/test_gw006_board_ir_opt_$opt"
+            "build/test_gw006_board_ir_opt_$opt"
+          done
+          sha256sum firmware/realtek/gwir_amebad_vendor_bus.c
+          echo "GW006_PA25_PA26_DRIVER_MOCK_TESTS=PASS; HARDWARE_NOT_TESTED"
       - name: Preserve exact audited source tree for offline code review (NO FLASH)
         uses: actions/upload-artifact@v4
         with:
