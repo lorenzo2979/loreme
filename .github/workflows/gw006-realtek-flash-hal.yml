@@ -135,6 +135,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Restore branch-reviewed board hook after pinned archive extraction.
+          git show HEAD:firmware/sdk/gwir_sdk_diag.c > firmware/sdk/gwir_sdk_diag.c
+          grep -F 'int gwir_sdk_board_prepare(void)' firmware/sdk/gwir_sdk_diag.c
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -180,6 +183,30 @@ jobs:
           sdk="$RUNNER_TEMP/ameba-rtos-d"
           python3 scripts/integrate_amebad_sdk.py --sdk "$sdk" --dry-run
           python3 scripts/integrate_amebad_sdk.py --sdk "$sdk" --apply
+          # Call the real board registration point BEFORE secure boot scheduling.
+          # With no audited board-specific provider, the weak hook returns
+          # failure and the service stays disabled. Never fabricate a secret.
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ["RUNNER_TEMP"])/"ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp/main.c"
+          text=p.read_text()
+          needle="(void)gwir_sdk_boot_schedule();"
+          if text.count(needle)!=1:
+              raise SystemExit("Missing/duplicate GWIR scheduler registration")
+          block='''{
+            extern int gwir_sdk_board_prepare(void);
+            int gwir_boot_status = gwir_sdk_board_prepare();
+            if (gwir_boot_status != 0)
+                DBG_8195A("[GW006] board boot config absent: %d; IR/auth/storage disabled\\n", gwir_boot_status);
+            gwir_boot_status = gwir_sdk_boot_schedule();
+            if (gwir_boot_status != 0)
+                DBG_8195A("[GW006] secure boot task not scheduled: %d\\n", gwir_boot_status);
+          }'''
+          p.write_text(text.replace(needle,block,1))
+          PY
+          grep -F 'gwir_sdk_board_prepare();' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/main.c"
+
           grep -F 'gwir_wbrg1_flash_port.c' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
           grep -F 'gwir_sdk_boot_schedule();' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/main.c"
       - name: Record native build start for fresh link evidence
