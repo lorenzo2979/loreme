@@ -2,7 +2,7 @@ name: GW006 CP19 flash layout audit (HOST ONLY - NO FLASH)
 
 on:
   push:
-    branches: [main]
+    branches: [main, review/gw006-realtek-flash-hal]
     paths:
       - 'scripts/audit_gw006_flash_map.py'
       - 'tests/test_flash_map_audit.py'
