@@ -17,6 +17,7 @@
 #include "../realtek/gwir_amebad_bus.h"
 #include "../realtek/gwir_amebad_vendor_bus.h"
 #include "../realtek/gwir_amebad_board_pins.h"
+#include "../realtek/gwir_wbrg1_flash_port.h"
 
 void gwir_sdk_integration_banner(void)
 {
@@ -104,6 +105,20 @@ int gwir_sdk_board_prepare(void)
         gwir_board_pins pins = gwir_board_pins_candidate();
         if (gwir_board_pins_validate(&pins) != 0)
             return -3;
+    }
+    /* Do not accept an arbitrary caller-supplied flash region. A board
+     * provider must use the SAME bounded, audited WBRG1 NOR adapter that
+     * independently checks authorization, geometry and JEDEC density.
+     * With the default STORAGE_APPROVED=0, attach returns -7 BEFORE any
+     * flash I/O; signed STORE, erase and firmware activation remain OFF. */
+    {
+        gwir_fj_io checked = {0};
+        if (gwir_wbrg1_flash_port_attach(&checked) != 0) return -4;
+        if (cfg->store_io->ctx != checked.ctx ||
+            cfg->store_io->read != checked.read ||
+            cfg->store_io->program != checked.program ||
+            cfg->store_io->erase_sector != checked.erase_sector ||
+            cfg->store_io->region_size != checked.region_size) return -5;
     }
     return gwir_sdk_boot_register(cfg);
 }
