@@ -71,6 +71,13 @@ class DualCopy(unittest.TestCase):
         with self.assertRaisesRegex(BackupError, "indipendente"):
             compare_dumps(self.a, self.a)
 
+    def test_hardlink_cannot_falsely_count_as_two_reads(self):
+        import os
+        linked = Path(self.temp.name) / "another_path_same_bytes.bin"
+        os.link(self.a, linked)
+        with self.assertRaisesRegex(BackupError, "hardlink"):
+            compare_dumps(self.a, linked)
+
     def test_cli_report_has_no_original_content_or_device_auth(self):
         report = Path(self.temp.name) / "report.json"
         r = subprocess.run([
