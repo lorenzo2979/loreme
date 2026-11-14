@@ -211,6 +211,23 @@ jobs:
           sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
           timeout 1500 make -C "$sdk/project_hp" all > km4.log 2>&1 || { tail -140 km4.log; exit 1; }
           echo "KM4_NATIVE_BUILD=PASS"
+      - name: Rebuild final KM4 image2 last so its audited objects survive vendor cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          # AmebaD's project_hp/asdk/Makefile deliberately removes
+          # build/ram/*.o in make_subdirs_secure and make_subdirs_bootloader.
+          # The full 'all' target executes these after image2, so a postbuild
+          # object audit cannot inspect the files unless image2 is built LAST.
+          # This is an evidence-only repeat: NOT a release/OTA flash procedure.
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk"
+          timeout 1200 make -C "$sdk" image2_ns > km4-image2-last.log 2>&1 || {
+             tail -100 km4-image2-last.log
+             exit 1
+          }
+          test -s "$sdk/build/ram/gwir_apconfig_button.o"
+          test -s "$sdk/build/ram/gwir_amebad_vendor_bus.o"
+          echo 'KM4_IMAGE2_LAST_OBJECT_RETAINED=PASS'
       - name: Audit REAL ARM final link (42 source modules, NO FLASH)
         shell: bash
         run: |
