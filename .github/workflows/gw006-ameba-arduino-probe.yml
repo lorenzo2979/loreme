@@ -71,13 +71,16 @@ jobs:
               'gwir_engine_process', 'gwir_fj_put', 'gwir_saved_play_command',
               'gwir_auth_dispatch_routed', 'gwir_runtime_owner_feed',
               'gw006_ameba_hmac_sha256', 'Gw006AmebaAuthenticatedTcp::poll()',
+              'Gw006AmebaRuntime::begin(', 'Gw006AmebaRuntime::poll()',
+              'gwir_ir_pipeline_init', 'gwir_wbrg1_flash_port_attach',
+              'gwir_amebad_vendor_board_ir_setup',
           )
           missing=[name for name in names if name not in data]
           if missing: raise SystemExit('ELF missing: '+str(missing))
           addresses=[int(line.split()[0],16) for line in lines if line.endswith(' s_gwir_engine')]
           if len(addresses)!=1 or not 0x02000000 <= addresses[0] < 0x02400000:
               raise SystemExit('GWIR engine not linked into Realtek PSRAM: '+str(addresses))
-          print('GW006_NINE_CORE_MODULES_HMAC_TCP_PSRAM_ELF_PASS')
+          print('GW006_ARM_ELF_LINKED_RUNTIME_WIFI_IR_FLASH_HMAC_PSRAM_PASS')
           PY
       - name: Upload diagnostics only - no flash images
         if: always()
