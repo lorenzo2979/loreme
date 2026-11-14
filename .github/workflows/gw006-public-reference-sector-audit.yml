@@ -76,6 +76,15 @@ jobs:
             "common_regions_not_proven_unused":runs(mask_identical),
             "variable_regions":runs([not x for x in mask_identical]),
             "all_ff_regions_not_proven_unused":runs(mask_all_ff),
+            "rejected_proposed_5mib_ir_partition": {
+              "start_hex":"0x200000","end_exclusive_hex":"0x700000",
+              "non_erased_4k_sectors_by_reference": {
+                 label:sum(b[p:p+sector] != b"\xff"*sector for p in range(0x200000,0x700000,sector))
+                 for label,b in images
+              },
+              "approved":False,
+              "warning":"A previously proposed 5MiB region overlaps real used sectors in public WBRG1 references and MUST NOT be enabled."
+            },
             "images":per_reference,
             "target_gw006_flash_read":False,
             "flash_partition_authorized":False,
