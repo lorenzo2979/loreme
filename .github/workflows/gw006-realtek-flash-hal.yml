@@ -115,6 +115,11 @@ jobs:
             "tests/test_source_manifest.py":[
                 ('== 42','== 43'),('42 C sources','43 C sources')],
             "tests/test_native_km4_objects.py":[('== 42','== 43')],
+            # Mock SDK test counts main.o plus every GW006 source object.
+            # One new security module => 44 total mock objects.
+            "tests/test_sdk_integration.py":[
+                ("==43,'One of 43 SDK objects", "==44,'One of 44 SDK objects"),
+                ("43 mocked-SDK objects", "44 mocked-SDK objects")],
             "tests/test_native_km4_link_map.py":[
                 ('len(srcs) == 42','len(srcs) == 43'),
                 ("['modules_with_allocated_sections'] == 42",
