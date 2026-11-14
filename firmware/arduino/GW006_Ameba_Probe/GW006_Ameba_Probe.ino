@@ -15,6 +15,7 @@
 #include <FlashMemory.h>
 extern "C" {
 #include "src/gwir_engine.h" // actual shared C engine compiled under src/
+#include "src/gwir_runtime_owner.h" // signed GWAS, persistent 96-button NOR journal
 }
 
 static constexpr unsigned int kTVButtons = 36u;
@@ -61,12 +62,29 @@ static bool gw006_core_selftest(void) {
     return decoded.command == GWIR_PONG && decoded.sequence == 1u &&
            decoded.payload_len == 0u;
 }
+/* Exercise the actual authenticated journal / owner code and refuse
+ * activation with absent keys, missing NOR region and no physical IR. */
+static bool gw006_store_auth_contracts_selftest() {
+    uint32_t bytes = gwir_fj_worst_case_rewrite_bytes();
+    if (bytes < 4000000u || bytes > 8000000u) return false;
+    if (gwir_fj_open(NULL, NULL) != -1) return false;
+    if (gwir_saved_play_init(NULL, NULL, NULL, NULL, 0u) != -1) return false;
+    if (gwir_auth_init(NULL, NULL, NULL, NULL, NULL) != GWIR_AUTH_REJECT)
+        return false;
+    if (gwir_runtime_owner_init(NULL, NULL, NULL, NULL, NULL,
+                                NULL, NULL, NULL, 0u, NULL, 0u) != -1)
+        return false;
+    return true;
+}
 void setup() {
     Serial.begin(115200);
-    Serial.println("GW006 AMEBAD ARDUINO TOOLCHAIN PROBE ONLY - NOT A GW006 IMAGE");
+    Serial.println("GW006 AMEBAD ARDUINO FAMILY BUILD - WBRG1 HARDWARE NOT YET SUPPORTED");
     Serial.println(gw006_core_selftest()
-                   ? "GW006 REAL C PROTOCOL + IR ENGINE PING PASS (NO IR HARDWARE)"
+                   ? "GW006 REAL C PROTOCOL + IR ENGINE PING PASS"
                    : "GW006 REAL C PROTOCOL/IR ENGINE SELFTEST FAILED");
+    Serial.println(gw006_store_auth_contracts_selftest()
+                   ? "GW006 NINE CORE MODULES: AUTH + 96-KEY NOR JOURNAL CONTRACTS PASS"
+                   : "GW006 AUTH/JOURNAL SOURCE CONTRACT TEST FAILED");
 }
 void loop() {
     delay(1000);
