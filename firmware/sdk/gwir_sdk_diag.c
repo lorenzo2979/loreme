@@ -78,5 +78,13 @@ int gwir_sdk_board_prepare(void)
     if (!gwir_gw006_board_port_config) return -1;
     cfg = gwir_gw006_board_port_config();
     if (!cfg) return -1;
+    /* The GW006 release must not start only a diagnostic Wi-Fi listener.
+     * The product requires IR capture/playback AND persistent saved codes.
+     * Actual partition ownership and key validity are checked separately. */
+    if (!cfg->provider || !cfg->ir_pipeline || !cfg->ir_config ||
+        !cfg->saved || !cfg->store || !cfg->store_io ||
+        !cfg->store_io->read || !cfg->store_io->program ||
+        !cfg->store_io->erase_sector || !cfg->pulse_scratch ||
+        !cfg->upload_scratch) return -2;
     return gwir_sdk_boot_register(cfg);
 }
