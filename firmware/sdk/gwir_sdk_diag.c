@@ -58,3 +58,25 @@ void gwir_sdk_integration_banner(void)
               ok ? "OK" : "FAIL", (unsigned int)sizeof(gwir_engine),
               (unsigned int)sizeof(gwir_amebad_rx_queue));
 }
+
+/*
+ * Real GW006 pre-scheduler registration hook. A separately validated board
+ * port may provide a strong implementation of this weak, OPTIONAL function
+ * returning a complete, static, authenticated configuration. A missing port
+ * never creates credentials, never starts Wi-Fi or IR, and never writes flash.
+ *
+ * This is the missing path between the SDK main entry and the registered
+ * GWIR-BOOT task. It does not certify an installable firmware by itself.
+ */
+#include "gwir_sdk_bootstrap.h"
+__attribute__((weak))
+const gwir_sdk_boot_config *gwir_gw006_board_port_config(void);
+
+int gwir_sdk_board_prepare(void)
+{
+    const gwir_sdk_boot_config *cfg;
+    if (!gwir_gw006_board_port_config) return -1;
+    cfg = gwir_gw006_board_port_config();
+    if (!cfg) return -1;
+    return gwir_sdk_boot_register(cfg);
+}
