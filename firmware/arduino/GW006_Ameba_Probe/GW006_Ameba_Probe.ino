@@ -14,6 +14,7 @@
 #include <IRDevice.h>
 #include <FlashMemory.h>
 #include "src/gw006_ameba_authenticated_tcp.h"
+#include "src/gw006_ameba_hmac.h"
 extern "C" {
 #include "src/gwir_engine.h" // actual shared C engine compiled under src/
 #include "src/gwir_runtime_owner.h" // signed GWAS, persistent 96-button NOR journal
@@ -81,6 +82,24 @@ static bool gw006_store_auth_contracts_selftest() {
         return false;
     return true;
 }
+/* A fixed PUBLIC self-test vector, NOT a device secret. Checks that
+ * Realtek's HMAC implementation matches desktop SHA-256/HMAC exactly. */
+static bool gw006_crypto_selftest() {
+    const char text[] = "GWIR3-AmebaD-hmac-self-test";
+    static const uint8_t expected[32] = {
+        0x04,0xc4,0x3c,0x91,0x4f,0xb5,0x05,0x99,
+        0xb0,0xe2,0xd0,0xd7,0xd9,0xe5,0x06,0xeb,
+        0x7e,0xdf,0x85,0x15,0xd9,0x3d,0x95,0x03,
+        0xc9,0x88,0xed,0x09,0xd0,0x82,0xc4,0x91
+    };
+    uint8_t key[32], digest[32];
+    for (unsigned i=0;i<32u;i++) key[i]=(uint8_t)(i+1u);
+    int rc=gw006_ameba_hmac_sha256(nullptr,key,sizeof(key),
+                                   (const uint8_t*)text,sizeof(text)-1u,digest);
+    bool ok=rc==0 && memcmp(digest,expected,sizeof(expected))==0;
+    memset(key,0,sizeof(key));memset(digest,0,sizeof(digest));
+    return ok;
+}
 void setup() {
     Serial.begin(115200);
     Serial.println("GW006 AMEBAD ARDUINO FAMILY BUILD - WBRG1 HARDWARE NOT YET SUPPORTED");
@@ -90,6 +109,9 @@ void setup() {
     Serial.println(gw006_store_auth_contracts_selftest()
                    ? "GW006 NINE CORE MODULES: AUTH + 96-KEY NOR JOURNAL CONTRACTS PASS"
                    : "GW006 AUTH/JOURNAL SOURCE CONTRACT TEST FAILED");
+    Serial.println(gw006_crypto_selftest()
+                   ? "GW006 AMEBAD REALTEK HMAC-SHA256 VECTOR PASS"
+                   : "GW006 AMEBAD REALTEK HMAC-SHA256 VECTOR FAILED");
 }
 void loop() {
     /* No listener until a trusted board port provisions key + fresh nonce,
