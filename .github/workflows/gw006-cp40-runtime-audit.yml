@@ -1,0 +1,17 @@
+name: GW006 CP40 - source runtime audit only (NO FLASH)
+on:
+  push:
+    branches: [review/gw006-realtek-flash-hal]
+    paths:
+      - '.github/workflows/gw006-cp40-runtime-audit.yml'
+      - 'scripts/gw006_cp40_runtime_audit.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit source release runtime interfaces (read-only)
+        run: python3 scripts/gw006_cp40_runtime_audit.py

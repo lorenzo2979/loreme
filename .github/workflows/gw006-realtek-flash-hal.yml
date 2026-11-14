@@ -1,0 +1,494 @@
+name: GW006 native Realtek HAL build evidence (NON INSTALLARE)
+on:
+  push:
+    branches: [review/gw006-realtek-flash-hal]
+    paths:
+      - '.github/workflows/gw006-realtek-flash-hal.yml'
+      - 'source_bundles/GW006_WBRG1_STORAGE_PORT_SOURCE_ONLY.zip'
+      - 'firmware/realtek/gwir_amebad_vendor_bus.c'
+      - 'firmware/realtek/gwir_amebad_vendor_bus.h'
+      - 'tests/stubs/gwir_ir_board_test_shim.h'
+      - 'tests/test_vendor_ir_board.c'
+      - 'firmware/sdk/gwir_sdk_diag.c'
+      - 'scripts/verify_gw006_product_link.py'
+      - 'tests/test_gw006_product_link.py'
+      - 'firmware/sdk/gwir_sdk_apconfig_port.c'
+      - 'firmware/sdk/gwir_sdk_apconfig_port.h'
+      - 'firmware/sdk/gwir_sdk_provisioned_identity.c'
+      - 'firmware/sdk/gwir_sdk_provisioned_identity.h'
+      - 'tests/test_sdk_provisioned_identity.c'
+      - 'tests/test_gw006_product_boot.c'
+      - 'firmware/core/gwir_apconfig_provision.c'
+      - 'firmware/core/gwir_apconfig_provision.h'
+      - 'tests/test_apconfig_provision.c'
+      - 'firmware/core/gwir_web_rpc.c'
+      - 'firmware/core/gwir_web_rpc.h'
+      - 'firmware/core/gwir_web_http_post.c'
+      - 'firmware/core/gwir_web_http_post.h'
+      - 'firmware/realtek/gwir_amebad_auth_server.c'
+      - 'web/**'
+      - 'scripts/build_gw006_browser_asset.py'
+      - 'tests/test_gw006_browser_gwcd_c.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check exact source release and hardware safety defaults
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "1a97c5f571c85224ea5df923bbf114addb3acea8bf1b65cbf35f3d653c168044  source_bundles/GW006_WBRG1_STORAGE_PORT_SOURCE_ONLY.zip" | sha256sum -c -
+          python3 - <<'PY'
+          from pathlib import Path,PurePosixPath
+          from zipfile import ZipFile
+          import stat
+          f=Path("source_bundles/GW006_WBRG1_STORAGE_PORT_SOURCE_ONLY.zip")
+          with ZipFile(f) as z:
+              names=set()
+              for i in z.infolist():
+                  p=PurePosixPath(i.filename)
+                  if i.is_dir() or p.is_absolute() or '..' in p.parts or i.filename in names or stat.S_ISLNK(i.external_attr >> 16):
+                      raise SystemExit("Unsafe archive member")
+                  names.add(i.filename)
+              z.extractall(".")
+          h=Path("firmware/realtek/gwir_wbrg1_flash_port.h").read_text()
+          if "#define GWIR_WBRG1_STORAGE_APPROVED 0" not in h:
+              raise SystemExit("Danger: default storage authorization not disabled")
+          if "gwir_sdk_boot_register(" not in Path("firmware/sdk/gwir_sdk_bootstrap.c").read_text():
+              raise SystemExit("Expected boot registration API missing")
+          print("STORAGE_DEFAULT_DENY=PASS")
+          PY
+          # Audit the pinned archive IN ISOLATION: repository-only scripts
+          # are not part of its source inventory.
+          python3 - <<'PY'
+          import os, subprocess
+          from pathlib import Path
+          from zipfile import ZipFile
+          source=Path(os.environ['RUNNER_TEMP'])/'gw006-locked-original'
+          source.mkdir()
+          with ZipFile('source_bundles/GW006_WBRG1_STORAGE_PORT_SOURCE_ONLY.zip') as z:
+              z.extractall(source)
+          subprocess.run(['python3',str(source/'scripts/verify_release_sources.py'),
+                          '--root',str(source)],check=True)
+          PY
+          python3 tests/test_native_km4_objects.py
+          python3 tests/test_native_km4_link_map.py
+      - name: Apply verified WBRG1 flash-region safety fix and reject unsafe target build
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check patches/gw006_reject_unverified_flash_region.patch
+          git apply patches/gw006_reject_unverified_flash_region.patch
+          # A careless one-flag enable must FAIL on the source that is built.
+          if cc -std=c11 -DGWIR_WBRG1_STORAGE_APPROVED=1 \
+             -Itests/stubs -Ifirmware/core -Ifirmware/realtek \
+             -c firmware/realtek/gwir_wbrg1_flash_port.c -o /tmp/gw006-unsafe.o \
+             >/tmp/gw006-guard-stdout.log 2>/tmp/gw006-guard-stderr.log; then
+             echo 'ERROR: unsafe flash target compiled unexpectedly'
+             exit 1
+          fi
+          grep -F 'GW006 FLASH BLOCKED' /tmp/gw006-guard-stderr.log
+          echo 'GW006_UNVERIFIED_PARTITION_COMPILE_DENIED=PASS'
+      # Apply the complete, context-verified storage-boot test patch.
+      - name: Link signed 96-button storage to secure boot (no flash approval)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The old locked archive predates authenticated STORE commands;
+          # apply the tested core protocol before wiring secure boot.
+          git apply --check patches/gw006_authenticated_storage_protocol.patch
+          git apply --check patches/gw006_authenticated_store_implementation.patch
+          git apply patches/gw006_authenticated_storage_protocol.patch
+          git apply patches/gw006_authenticated_store_implementation.patch
+          # Abort a partially staged upload without erasing previously committed IR.
+          python3 scripts/apply_gw006_storage_abort.py --source-dir firmware/core
+          # Object path patch validated with git apply --check against SDK release.
+          git apply --check patches/gw006_native_real_object_dir.patch
+          git apply patches/gw006_native_real_object_dir.patch
+          git apply --check patches/gw006_boot_storage_runtime.patch
+          git apply --check patches/gw006_boot_storage_host_tests.patch
+          git apply patches/gw006_boot_storage_runtime.patch
+          git apply patches/gw006_boot_storage_host_tests.patch
+          # The GW018 reference has an independent boot adapter which is
+          # NOT a member of the pinned GW006 product. Relocate it in this
+          # ephemeral CI checkout BEFORE the first post-patch source lock.
+          if test -f firmware/sdk/gwir_gw018_ir_boot.c; then
+            mv firmware/sdk/gwir_gw018_ir_boot.c "$RUNNER_TEMP/gwir_gw018_ir_boot.reference.c"
+          fi
+          # The 43rd native module is a board-backed identity provider.
+          # Re-lock the source and native map gates against the expanded
+          # reviewed source tree; never skip or weaken their checks.
+          python3 - <<'PY'
+          from pathlib import Path
+          substitutions={
+            "scripts/verify_release_sources.py":[
+                ('".html", ".json"', '".html", ".json", ".js", ".mjs"')],
+            "scripts/integrate_amebad_sdk.py":[
+                ('"gwir_sdk_bootstrap.c"]','"gwir_sdk_bootstrap.c", "gwir_sdk_provisioned_identity.c"]')],
+            "scripts/verify_native_km4_objects.py":[
+                ('c_count != 42','c_count != 46'),
+                ('expected exact 42','expected exact 46')],
+            "scripts/verify_native_km4_link_map.py":[
+                ("count != 42 or objs['native_objects_verified'] != 42",
+                 "count != 46 or objs['native_objects_verified'] != 46"),
+                ('exactly 42 validated','exactly 46 validated')],
+            "tests/test_source_manifest.py":[
+                ('== 42','== 46'),('42 C sources','46 C sources')],
+            "tests/test_native_km4_objects.py":[('== 42','== 46')],
+            # Mock SDK test counts main.o plus every GW006 source object.
+            # Security module + 2 browser transport modules + APConfig controller => 47 mock objects.
+            "tests/test_sdk_integration.py":[
+                ("==43,'One of 43 SDK objects", "==47,'One of 47 SDK objects"),
+                ("43 mocked-SDK objects", "47 mocked-SDK objects")],
+            "tests/test_native_km4_link_map.py":[
+                ('len(srcs) == 42','len(srcs) == 46'),
+                ("['modules_with_allocated_sections'] == 42",
+                 "['modules_with_allocated_sections'] == 46"),
+                ('len(actual) == 42','len(actual) == 46'),
+                ("{'native_objects_verified': 42}",
+                 "{'native_objects_verified': 46}"),
+                ('return_value=42','return_value=46'),
+                ("['expected_modules'] == 42","['expected_modules'] == 46"),
+                ("['loaded_modules'] == 42","['loaded_modules'] == 46"),
+                ("['loaded_but_unallocated']) == 23","['loaded_but_unallocated']) == 27"),
+                ('42-object','46-object'),
+                ('42 loads / 19 linked / 23 excluded',
+                 '46 loads / 19 linked / 27 excluded')]
+          }
+          for name, replacements in substitutions.items():
+              path=Path(name)
+              txt=path.read_text()
+              for old,new in replacements:
+                  if old not in txt: raise SystemExit(f'Unexpected source: {name} lacks {old}')
+                  txt=txt.replace(old,new)
+              path.write_text(txt)
+          # The lock gate AST reads the literal GROUPS mapping. Extend the
+          # actual core list, not a late dynamic append which it cannot audit.
+          source=Path('scripts/integrate_amebad_sdk.py')
+          code=source.read_text()
+          anchor='"gwir_runtime_owner.c"]'
+          replacement='"gwir_runtime_owner.c", "gwir_web_rpc.c", "gwir_web_http_post.c", "gwir_apconfig_controller.c"]'
+          if code.count(anchor)!=1 or replacement in code:
+              raise SystemExit('Unexpected SDK integrator source')
+          source.write_text(code.replace(anchor,replacement,1))
+          print('46-source SDK and ELF audit updated, original release attested independently')
+          PY
+          # The reviewed real-object-dir change moved synthetic object
+          # fixtures under asdk/build/ram. The fixture must make its parent.
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tests/test_native_km4_objects.py')
+          old='    data_obj = sdk / OBJECT_ROOT / \'asset_data_only_probe.o\''
+          new=old+'\n    data_obj.parent.mkdir(parents=True, exist_ok=True)'
+          text=p.read_text()
+          if text.count(old)!=1: raise SystemExit('Unexpected native fixture')
+          p.write_text(text.replace(old,new,1))
+          PY
+          # Maintain a *post-patch* source hash list for compiled object gates.
+          # The original release ZIP has already passed its independent SHA
+          # and immutable manifest verification above.
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          from scripts.verify_release_sources import records
+          p=Path('docs/CP21_SOURCE_MANIFEST.json')
+          obj=json.loads(p.read_text())
+          obj['files']=records(Path.cwd())
+          p.write_text(json.dumps(obj,indent=2)+chr(10))
+          PY
+          python3 scripts/verify_release_sources.py
+          make build/test_sdk_bootstrap
+          for mode in absent invalid ir-refuse success storage-ready storage-mount-error offline task-fail; do
+            ./build/test_sdk_bootstrap "$mode"
+          done
+          echo 'GW006_AUTHENTICATED_FLASH_IR_BOOT_HOST_TESTS=PASS'
+      - name: Integrate selected PA25 TX and PA26 RX Realtek IRQ driver; bench-only tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Source bundle manifest was checked above; replace only the board
+          # adapter with the separately reviewed file in this branch.
+          git show HEAD:firmware/realtek/gwir_amebad_vendor_bus.c > firmware/realtek/gwir_amebad_vendor_bus.c
+          git show HEAD:firmware/realtek/gwir_amebad_vendor_bus.h > firmware/realtek/gwir_amebad_vendor_bus.h
+          mkdir -p build
+          for opt in 0 1; do
+            cc -std=c11 -Wall -Wextra -Werror \
+              -DGWIR_GW006_IR_BENCH_OPT_IN="$opt" \
+              -include tests/stubs/gwir_ir_board_test_shim.h \
+              -Itests/stubs -Ifirmware/realtek \
+              firmware/realtek/gwir_amebad_vendor_bus.c \
+              tests/test_vendor_ir_board.c \
+              -o "build/test_gw006_board_ir_opt_$opt"
+            "build/test_gw006_board_ir_opt_$opt"
+          done
+          sha256sum firmware/realtek/gwir_amebad_vendor_bus.c
+          echo "GW006_PA25_PA26_DRIVER_MOCK_TESTS=PASS; HARDWARE_NOT_TESTED"
+      - name: Regenerate exact post-patch source manifest after IR GPIO adapter update
+        shell: bash
+        run: |
+          set -euo pipefail
+          # GW018 native reference boot adapter is deliberately excluded
+          # from the real GW006 SDK product inventory, not silently linked.
+          if test -f firmware/sdk/gwir_gw018_ir_boot.c; then
+            mv firmware/sdk/gwir_gw018_ir_boot.c "$RUNNER_TEMP/gwir_gw018_ir_boot.reference.c"
+          fi
+          # Restore branch-reviewed board hook after pinned archive extraction.
+          git show HEAD:firmware/sdk/gwir_sdk_diag.c > firmware/sdk/gwir_sdk_diag.c
+          # The locked source predates the physical controller. Restore the
+          # reviewed board-approval-only FreeRTOS commissioning path, then
+          # hash all 46 modules before ARM compilation.
+          git show HEAD:firmware/sdk/gwir_sdk_apconfig_port.c > firmware/sdk/gwir_sdk_apconfig_port.c
+          git show HEAD:firmware/sdk/gwir_sdk_apconfig_port.h > firmware/sdk/gwir_sdk_apconfig_port.h
+          grep -F 'gwir_sdk_apconfig_commission(' firmware/sdk/gwir_sdk_diag.c
+          grep -F 'gwir_apconfig_controller_poll(' firmware/sdk/gwir_sdk_apconfig_port.c
+          # Override only the audited single-owner browser adapter; never
+          # replace/restore any secret or board flash map from a public dump.
+          git show HEAD:firmware/realtek/gwir_amebad_auth_server.c > firmware/realtek/gwir_amebad_auth_server.c
+          grep -F 'gwir_web_rpc_process(' firmware/realtek/gwir_amebad_auth_server.c
+          grep -F 'int gwir_sdk_board_prepare(void)' firmware/sdk/gwir_sdk_diag.c
+          # Pinned bundle has the old Wi-Fi-only APConfig. Restore current
+          # reviewed DHCP/static and DuckDNS parsing before the hash gate
+          # and before the native vendor ARM compilation.
+          git show HEAD:firmware/core/gwir_apconfig_provision.h > firmware/core/gwir_apconfig_provision.h
+          git show HEAD:firmware/core/gwir_apconfig_provision.c > firmware/core/gwir_apconfig_provision.c
+          git show HEAD:tests/test_apconfig_provision.c > tests/test_apconfig_provision.c
+          make build/test_apconfig_provision
+          ./build/test_apconfig_provision
+          # Embed the real reviewed 96-button HTML and WebCrypto JS into
+          # the SDK dashboard gzip asset with exact CSP hash pins.
+          # This never enables HTTP credentials: the JS refuses plain HTTP.
+          python3 scripts/build_gw006_browser_asset.py --write
+          grep -F "script-src 'sha256-" firmware/core/gwir_dashboard_asset.c
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.verify_release_sources import records
+          path=Path('docs/CP21_SOURCE_MANIFEST.json')
+          d=json.loads(path.read_text())
+          d['files']=records(Path.cwd())
+          path.write_text(json.dumps(d,indent=2)+'\n')
+          PY
+          python3 scripts/verify_release_sources.py
+      - name: Host-test unique persistent HMAC nonce and complete-product boot gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Ifirmware/sdk -Ifirmware/core \
+            firmware/sdk/gwir_sdk_provisioned_identity.c \
+            tests/test_sdk_provisioned_identity.c \
+            -o build/test_sdk_provisioned_identity
+          ./build/test_sdk_provisioned_identity
+          cc -std=c11 -O1 -g -Wall -Wextra -Werror -pedantic \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -Ifirmware/sdk -Ifirmware/core \
+            firmware/sdk/gwir_sdk_provisioned_identity.c \
+            tests/test_sdk_provisioned_identity.c \
+            -o build/test_sdk_provisioned_identity_asan
+          ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+            ./build/test_sdk_provisioned_identity_asan
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -ffunction-sections -fdata-sections '-DDBG_8195A(...)=' \
+            -Itests/stubs -Ifirmware/sdk -Ifirmware/core -Ifirmware/realtek \
+            firmware/sdk/gwir_sdk_diag.c \
+            firmware/realtek/gwir_amebad_board_pins.c \
+            tests/test_gw006_product_boot.c \
+            -Wl,--gc-sections -o build/test_gw006_product_boot
+          ./build/test_gw006_product_boot
+          python3 tests/test_source_manifest.py
+          python3 tests/test_native_km4_objects.py
+          python3 tests/test_native_km4_link_map.py
+          # All 46 objects remain source-locked, while 3 obsolete services
+          # must be ABSENT from the firmware (including legacy plaintext).
+          python3 tests/test_gw006_product_link.py
+          echo 'GW006_46_SOURCE_AND_CREDENTIAL_TESTS_PASS=1; NO HARDWARE'
+      - name: Preserve exact audited source tree for offline code review (NO FLASH)
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-extracted-source-review-NO-FLASH
+          path: |
+            firmware/
+            scripts/
+            tests/
+            Makefile
+          retention-days: 14
+      - name: Host NOR HAL and SDK wiring tests (no hardware)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq make bc python3 git curl wget unzip bzip2 lib32z1 lib32stdc++6 libssl-dev
+          make test-wbrg1-flash-port test-sdk-integration
+      - name: Obtain official SHA-pinned AmebaD SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_sha=7569200fb8304daa61a9f09ccf439ada38d6de2e
+          git clone --depth 1 https://github.com/Ameba-AIoT/ameba-rtos-d.git "$RUNNER_TEMP/ameba-rtos-d"
+          if [ "$(git -C "$RUNNER_TEMP/ameba-rtos-d" rev-parse HEAD)" != "$sdk_sha" ]; then
+            git -C "$RUNNER_TEMP/ameba-rtos-d" fetch --depth 1 origin "$sdk_sha"
+            git -C "$RUNNER_TEMP/ameba-rtos-d" checkout --detach FETCH_HEAD
+          fi
+          test "$(git -C "$RUNNER_TEMP/ameba-rtos-d" rev-parse HEAD)" = "$sdk_sha"
+      - name: Integrate all 46 firmware C sources into the actual vendor SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/ameba-rtos-d"
+          python3 scripts/integrate_amebad_sdk.py --sdk "$sdk" --dry-run
+          python3 scripts/integrate_amebad_sdk.py --sdk "$sdk" --apply
+          grep -F 'gwir_sdk_provisioned_identity.c' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          # Call the real board registration point BEFORE secure boot scheduling.
+          # With no audited board-specific provider, the weak hook returns
+          # failure and the service stays disabled. Never fabricate a secret.
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ["RUNNER_TEMP"])/"ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp/main.c"
+          text=p.read_text()
+          needle="(void)gwir_sdk_boot_schedule();"
+          if text.count(needle)!=1:
+              raise SystemExit("Missing/duplicate GWIR scheduler registration")
+          block='''{
+            extern int gwir_sdk_board_prepare(void);
+            int gwir_boot_status = gwir_sdk_board_prepare();
+            if (gwir_boot_status != 0)
+                DBG_8195A("[GW006] board boot config absent: %d; IR/auth/storage disabled\\n", gwir_boot_status);
+            gwir_boot_status = gwir_sdk_boot_schedule();
+            if (gwir_boot_status != 0)
+                DBG_8195A("[GW006] secure boot task not scheduled: %d\\n", gwir_boot_status);
+          }'''
+          p.write_text(text.replace(needle,block,1))
+          PY
+          grep -F 'gwir_sdk_board_prepare();' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/main.c"
+
+          grep -F 'gwir_wbrg1_flash_port.c' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          grep -F 'gwir_sdk_boot_schedule();' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/main.c"
+      - name: Record native build start for fresh link evidence
+        shell: bash
+        run: touch "$RUNNER_TEMP/gwir_native_started"
+      - name: Enable Realtek IR PA25 PA26 SDK API compilation (NOT hardware enable)
+        shell: bash
+        run: |
+          set -euo pipefail
+          hp="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
+          grep -q '# >>> GWIR_REV9_START' "$hp"
+          # Validates actual vendor Pinmux_Config, InterruptRegister/En/Dis
+          # and IR_INTConfig against the pinned AmebaD SDK, while
+          # board_ir_setup is NOT called and no board GPIO is activated.
+          sed -i '/# >>> GWIR_REV9_START/a MODULE_IFLAGS += -DGWIR_GW006_IR_BENCH_OPT_IN=1' "$hp"
+          grep -F 'GWIR_GW006_IR_BENCH_OPT_IN=1' "$hp"
+          echo "VENDOR_IR_PA25_PA26_API_COMPILE_ENABLED=1; NO BOARD BOOT CONFIG"
+      - name: Native KM0 build
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          timeout 1200 make -C "$sdk/project_lp" all > km0.log 2>&1 || { tail -100 km0.log; exit 1; }
+          echo "KM0_NATIVE_BUILD=PASS"
+      - name: Native KM4 build with the new Flash HAL
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
+          timeout 1500 make -C "$sdk/project_hp" all > km4.log 2>&1 || { tail -140 km4.log; exit 1; }
+          echo "KM4_NATIVE_BUILD=PASS"
+      - name: Preserve final linked KM4 evidence and rebuild disposable objects for audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Official AmebaD asdk/Makefile has make_subdirs, make_subdirs_secure,
+          # and make_subdirs_bootloader; the latter two erase build/ram/*.o.
+          # 'make image2_ns' invokes a linker path that may erase them as well.
+          # After successful KM4 'make all', independently invoke ONLY
+          # make_subdirs, whose last operation is make -C make all.
+          # This restores the fresh compilation objects without re-running
+          # bootloader/secure targets, and does NOT change the already-linked
+          # ARM image or map being audited separately.
+          sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk"
+          test -s "$sdk/image/text_image2_ns.map"
+          test -s "$sdk/image/target_img2.axf"
+          sha256sum "$sdk/image/text_image2_ns.map" "$sdk/image/target_img2.axf" > /tmp/gwir_before.sha
+          timeout 1200 make -C "$sdk" make_subdirs > km4-objects-only.log 2>&1 || {
+            tail -120 km4-objects-only.log
+            exit 1
+          }
+          test -s "$sdk/build/ram/gwir_apconfig_button.o"
+          test -s "$sdk/build/ram/gwir_amebad_vendor_bus.o"
+          sha256sum "$sdk/image/text_image2_ns.map" "$sdk/image/target_img2.axf" > /tmp/gwir_after.sha
+          cmp /tmp/gwir_before.sha /tmp/gwir_after.sha
+          echo 'KM4_OBJECTS_FRESH_AND_FINAL_LINK_UNCHANGED=PASS (NO BOARD TEST)'
+      - name: Audit REAL ARM final link (46 source modules, NO FLASH)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p native-link-inspection
+          sdk="$RUNNER_TEMP/ameba-rtos-d"
+          # A failed final-link audit MUST fail the job; preserve diagnostics
+          # and map/ELF artifact for inspection even when link gate rejects.
+          set +e
+          python3 scripts/verify_gw006_product_link.py --sdk "$sdk" \
+             --build-start-file "$RUNNER_TEMP/gwir_native_started" \
+             --output native-link-inspection/FINAL_LINK_REPORT.json \
+             > native-link-inspection/FINAL_LINK_LOG.txt 2>&1
+          gate_status=$?
+          set -e
+          image="$sdk/project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk/image"
+          cp "$image/text_image2_ns.map" native-link-inspection/
+          cp "$image/target_img2.axf" native-link-inspection/
+          (cd native-link-inspection && sha256sum text_image2_ns.map target_img2.axf > SHA256SUMS.txt)
+          if [ "$gate_status" -ne 0 ]; then
+            echo "GW006_PRODUCT_LINK_GATE=FAIL (not an installable firmware)" | tee native-link-inspection/FINAL_LINK_STATUS.txt
+            cat native-link-inspection/FINAL_LINK_LOG.txt
+            exit "$gate_status"
+          fi
+          echo 'GW006_PRODUCT_LINK_GATE=PASS (does not certify hardware)' | tee native-link-inspection/FINAL_LINK_STATUS.txt
+      - name: Upload Realtek final-link inspection (DO NOT INSTALL)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-final-link-inspection-NO-FLASH
+          path: native-link-inspection/
+          retention-days: 14
+      - name: Capture VENDOR-built firmware images as NON-INSTALLABLE proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p native-image-evidence
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,json,hashlib,shutil
+          root=Path(os.environ['RUNNER_TEMP'])/'ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE'
+          out=Path('native-image-evidence')
+          samples=[('project_lp','km0_boot_all.bin'),('project_hp','km4_boot_all.bin'),('project_hp','km0_km4_image2.bin')]
+          report={'verified_sdk_sha':'7569200fb8304daa61a9f09ccf439ada38d6de2e',
+                  'source_release_sha256':'1a97c5f571c85224ea5df923bbf114addb3acea8bf1b65cbf35f3d653c168044',
+                  'installed_on_hardware':False,'safe_to_flash':False,
+                  'known_blockers':['Boot key/nonce provider absent','No real board IR authorization',
+                                    'WBRG1 flash partition proposal not validated on user device',
+                                    'Persistent journal not runtime-bound to authenticated commands',
+                                    'No hardware boot test'],'images':[]}
+          for core,name in samples:
+              p=root/core/'asdk/image'/name
+              if not p.is_file() or p.stat().st_size<4096:
+                  raise SystemExit('Missing/too-small vendor image: '+str(p))
+              b=p.read_bytes()
+              (out/name).write_bytes(b)
+              report['images'].append({'from':core,'file':name,'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest()})
+          (out/'BUILD_EVIDENCE.json').write_text(json.dumps(report,indent=2)+'\n')
+          (out/'NON_INSTALLARE.txt').write_text('SDK NATIVO, NON APPROVATO PER INSTALLAZIONE SU GW006.\nNessun flash. Driver flash disattivato. Nessun collaudo hardware.\n')
+          print(json.dumps(report,indent=2))
+          PY
+      - name: Upload images and report - NEVER FLASH
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-realtek-built-images-EXPERIMENTAL-DO-NOT-FLASH
+          path: native-image-evidence/
+          retention-days: 14

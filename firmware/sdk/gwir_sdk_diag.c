@@ -4,6 +4,7 @@
 #include "../core/gwir_engine.h"
 #include "../core/gwir_auth.h"
 #include "gwir_sdk_hmac.h"
+#include "gwir_sdk_provisioned_identity.h"
 #include "gwir_sdk_apconfig_port.h"
 #include "gwir_sdk_apconfig_wifi.h"
 #include "../core/gwir_apconfig_button.h"
@@ -15,6 +16,8 @@
 #include "../realtek/gwir_amebad_rx_irq.h"
 #include "../realtek/gwir_amebad_bus.h"
 #include "../realtek/gwir_amebad_vendor_bus.h"
+#include "../realtek/gwir_amebad_board_pins.h"
+#include "../realtek/gwir_wbrg1_flash_port.h"
 
 void gwir_sdk_integration_banner(void)
 {
@@ -46,6 +49,9 @@ void gwir_sdk_integration_banner(void)
     ok = ok && (gwir_auth_dispatch(NULL, NULL, NULL, NULL, 0u, NULL, 0u, NULL, 0u, NULL) == GWIR_AUTH_REJECT);
     /* Check the HMAC provider is linked but reject missing key before any crypto call. */
     ok = ok && (gwir_sdk_mbedtls_hmac(NULL, NULL, 32u, msg, sizeof(msg), unused_digest) == GWIR_SDK_HMAC_REJECT);
+    /* Retain the real provider in the final linked image, while refusing
+     * any attempt to generate credentials without a board-backed identity. */
+    ok = ok && (gwir_sdk_identity_init(NULL, NULL, NULL) == -1);
     /* Verify fail-closed APConfig port, no GPIO, Wi-Fi or IR activity. */
     ok = ok && (gwir_apconfig_init(NULL, (gwir_apconfig_ops){0}) == -1);
     ok = ok && (gwir_sdk_button_read_pb23(NULL) == -1);
@@ -57,4 +63,62 @@ void gwir_sdk_integration_banner(void)
     DBG_8195A("[GWIR REV16] SDK link probe %s; e=%u,rxq=%u; IR/WiFi disabled\n",
               ok ? "OK" : "FAIL", (unsigned int)sizeof(gwir_engine),
               (unsigned int)sizeof(gwir_amebad_rx_queue));
+}
+
+/*
+ * Real GW006 pre-scheduler registration hook. A separately validated board
+ * port may provide a strong implementation of this weak, OPTIONAL function
+ * returning a complete, static, authenticated configuration. A missing port
+ * never creates credentials, never starts Wi-Fi or IR, and never writes flash.
+ *
+ * This is the missing path between the SDK main entry and the registered
+ * GWIR-BOOT task. It does not certify an installable firmware by itself.
+ */
+#include "gwir_sdk_bootstrap.h"
+__attribute__((weak))
+const gwir_sdk_boot_config *gwir_gw006_board_port_config(void);
+
+int gwir_sdk_board_prepare(void)
+{
+    const gwir_sdk_boot_config *cfg;
+    /* Allow physical-button first-time APConfig even before a STA HMAC
+     * identity exists. The SDK port refuses to create any task unless a
+     * separately reviewed GW006 board approval and provisioning backend
+     * are present. This call alone NEVER starts an open AP. */
+    (void)gwir_sdk_apconfig_commission();
+    if (!gwir_gw006_board_port_config) return -1;
+    cfg = gwir_gw006_board_port_config();
+    if (!cfg) return -1;
+    /* The GW006 release must not start only a diagnostic Wi-Fi listener.
+     * The product requires IR capture/playback AND persistent saved codes.
+     * Actual partition ownership and key validity are checked separately. */
+    if (!cfg->provider || !cfg->ir_pipeline || !cfg->ir_config ||
+        !cfg->saved || !cfg->store || !cfg->store_io ||
+        !cfg->store_io->read || !cfg->store_io->program ||
+        !cfg->store_io->erase_sector || !cfg->pulse_scratch ||
+        !cfg->upload_scratch) return -2;
+    /* Validate the *real linked* GW006 pin profile before registering any
+     * signed IR engine. This is only a logical pin-collision check; it does
+     * not prove electrical separation of the red LED on PA25, and it does
+     * NOT authorize the hardware, an IR IRQ, or any Flash access. */
+    {
+        gwir_board_pins pins = gwir_board_pins_candidate();
+        if (gwir_board_pins_validate(&pins) != 0)
+            return -3;
+    }
+    /* Do not accept an arbitrary caller-supplied flash region. A board
+     * provider must use the SAME bounded, audited WBRG1 NOR adapter that
+     * independently checks authorization, geometry and JEDEC density.
+     * With the default STORAGE_APPROVED=0, attach returns -7 BEFORE any
+     * flash I/O; signed STORE, erase and firmware activation remain OFF. */
+    {
+        gwir_fj_io checked = {0};
+        if (gwir_wbrg1_flash_port_attach(&checked) != 0) return -4;
+        if (cfg->store_io->ctx != checked.ctx ||
+            cfg->store_io->read != checked.read ||
+            cfg->store_io->program != checked.program ||
+            cfg->store_io->erase_sector != checked.erase_sector ||
+            cfg->store_io->region_size != checked.region_size) return -5;
+    }
+    return gwir_sdk_boot_register(cfg);
 }

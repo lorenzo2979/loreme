@@ -1,0 +1,25 @@
+name: GW006 CP43 - dual-device-backup read-only audit (NO FLASH)
+on:
+  push:
+    branches: [review/gw006-realtek-flash-hal]
+    paths:
+      - 'scripts/verify_gw006_dual_backup_readonly.py'
+      - 'tests/test_gw006_dual_backup_readonly.py'
+      - '.github/workflows/gw006-cp43-dual-backup-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dual-backup:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Synthetic negative tests (not a real board, never authorize write)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/test_gw006_dual_backup_readonly.py
+          python3 tests/test_flash_map_audit.py
+          echo "GW006_DUAL_BACKUP_SYNTHETIC_TESTS=PASS"
+          echo "NO_ACTUAL_DEVICE_BACKUP_RECEIVED=TRUE"
+          echo "GWIR_WBRG1_STORAGE_APPROVED=0"

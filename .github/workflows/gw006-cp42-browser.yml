@@ -1,0 +1,69 @@
+name: GW006 CP42 - browser WebCrypto protocol and 96-button tests (NO FLASH)
+on:
+  push:
+    branches: [review/gw006-realtek-flash-hal]
+    paths:
+      - "web/**"
+      - "tests/test_gw006_browser_protocol.mjs"
+      - "tests/test_gw006_browser_gwcd_c.c"
+      - ".github/workflows/gw006-cp42-browser.yml"
+      - "scripts/build_gw006_browser_asset.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Signed GWAS request/response and replay tests
+        run: node --test tests/test_gw006_browser_protocol.mjs
+      - name: Browser GWCD v1 to pinned production C parser (5 x 2048)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '1a97c5f571c85224ea5df923bbf114addb3acea8bf1b65cbf35f3d653c168044  source_bundles/GW006_WBRG1_STORAGE_PORT_SOURCE_ONLY.zip' | sha256sum -c -
+          mkdir -p build/cp42
+          node --input-type=module <<'JS'
+          import {writeFileSync} from "node:fs";
+          import {encodeGwcd} from "./web/gw006_protocol.mjs";
+          const frame=new Uint8Array(12+2048*4);
+          const v=new DataView(frame.buffer);
+          v.setUint32(0,38000,false);
+          v.setUint16(4,333,false);
+          v.setUint16(6,2048,false);
+          v.setUint32(8,25000,false);
+          for(let i=0;i<2048;i++)v.setUint32(12+4*i,1000+i,false);
+          const blob=encodeGwcd(95,Array(5).fill(frame));
+          if(blob.length!==41040)throw new Error("GWCD max length");
+          writeFileSync("build/cp42/max.gwcd",blob);
+          JS
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          root=Path("build/cp42/real_c")
+          expected={
+            "firmware/core/gwir_protocol.c",
+            "firmware/core/gwir_protocol.h",
+            "firmware/core/gwir_gwcd_store.c",
+            "firmware/core/gwir_gwcd_store.h",
+          }
+          with ZipFile("source_bundles/GW006_WBRG1_STORAGE_PORT_SOURCE_ONLY.zip") as z:
+              for name in expected:
+                  if name not in z.namelist(): raise SystemExit("Missing pinned source "+name)
+                  target=root/name
+                  target.parent.mkdir(parents=True,exist_ok=True)
+                  target.write_bytes(z.read(name))
+          PY
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Ibuild/cp42/real_c/firmware/core \
+            build/cp42/real_c/firmware/core/gwir_protocol.c \
+            build/cp42/real_c/firmware/core/gwir_gwcd_store.c \
+            tests/test_gw006_browser_gwcd_c.c \
+            -o build/cp42/verify_gwcd
+          ./build/cp42/verify_gwcd build/cp42/max.gwcd
+      - name: Build restricted CSP gzip web asset
+        run: python3 scripts/build_gw006_browser_asset.py --check

@@ -1,0 +1,68 @@
+--- a/firmware/realtek/gwir_wbrg1_flash_port.h
++++ b/firmware/realtek/gwir_wbrg1_flash_port.h
+@@ -2,22 +2,43 @@
+ #define GWIR_WBRG1_FLASH_PORT_H
+ #include "../core/gwir_flash_journal.h"
+ 
+-/* PROPOSED layout for a future standalone 8-MiB AmebaD image, NOT an
+- * observation of the owner's physical flash. Offsets from flash origin.
+- * Must NOT be used while OpenBeken or Tuya firmware is installed.
+- * 0x000000-0x1FFFFF reserved for boot, dual applications and SDK FTL.
+- * 0x200000-0x6FFFFF proposed exclusive GWIR IR journal (5 MiB).
+- * 0x700000-0x7FFFFF not touched by this port (calibration/user data unknown).
+- * Real device partition map, backup AND recovery must be verified before
+- * GWIR_WBRG1_STORAGE_APPROVED may be enabled in an authorized target build.
++/* Historical non-installable proposal: 0x200000..0x6FFFFF.
++ * On 14 Nov 2026, 4 independently verified WBRG1 8MiB public dump references
++ * showed 606-646 NON-ERASED sectors inside that range. This partition MUST
++ * never be enabled based on this placeholder; identical/FF sectors also do
++ * not prove availability on an owner's GW006. Default: FAIL CLOSED.
++ * A production layout must be verified on the exact target and supplied as
++ * explicit build parameters, alongside independent recovery evidence.
+  */
+ #define GWIR_WBRG1_FLASH_BYTES 0x00800000u
+-#define GWIR_WBRG1_IR_START    0x00200000u
+-#define GWIR_WBRG1_IR_BYTES    0x00500000u
+-
++#ifndef GWIR_WBRG1_IR_START
++#define GWIR_WBRG1_IR_START    0x00200000u /* PLACEHOLDER, NO WRITE */
++#define GWIR_WBRG1_PLACEHOLDER_START 1
++#endif
++#ifndef GWIR_WBRG1_IR_BYTES
++#define GWIR_WBRG1_IR_BYTES    0x00500000u /* PLACEHOLDER, NO WRITE */
++#define GWIR_WBRG1_PLACEHOLDER_BYTES 1
++#endif
+ #ifndef GWIR_WBRG1_STORAGE_APPROVED
+ #define GWIR_WBRG1_STORAGE_APPROVED 0
+ #endif
++#ifndef GWIR_WBRG1_BOARD_LAYOUT_VERIFIED
++#define GWIR_WBRG1_BOARD_LAYOUT_VERIFIED 0
++#endif
++#if GWIR_WBRG1_STORAGE_APPROVED == 1
++  /* Synthetic NOR tests are never allowed to authorize actual ARM firmware. */
++  #if defined(GWIR_WBRG1_HOST_NOR_TEST) && defined(__arm__)
++    #error "Mock-only override must not appear in ARM firmware"
++  #endif
++  #if !defined(GWIR_WBRG1_HOST_NOR_TEST)
++    #if GWIR_WBRG1_BOARD_LAYOUT_VERIFIED != 1
++      #error "GW006 FLASH BLOCKED: audited board layout and restoration evidence required"
++    #endif
++    #if defined(GWIR_WBRG1_PLACEHOLDER_START) || defined(GWIR_WBRG1_PLACEHOLDER_BYTES)
++      #error "GW006 FLASH BLOCKED: old 5MiB placeholder cannot be approved"
++    #endif
++  #endif
++#endif
+ 
+ /* Fill flash IO only when a board-specific firmware build EXPLICITLY grants
+  * use of this region, the 8MiB JEDEC density is confirmed and it accommodates
+--- a/Makefile
++++ b/Makefile
+@@ -372,7 +372,7 @@
+ 	$(CC) $(CFLAGS) -Itests/stubs -Ifirmware/core -Ifirmware/realtek \
+ 		firmware/realtek/gwir_wbrg1_flash_port.c tests/test_wbrg1_flash_port.c -o build/test_wbrg1_flash_port_disabled
+ 	./build/test_wbrg1_flash_port_disabled
+-	$(CC) $(CFLAGS) -DGWIR_WBRG1_STORAGE_APPROVED=1 \
++	$(CC) $(CFLAGS) -DGWIR_WBRG1_STORAGE_APPROVED=1 -DGWIR_WBRG1_HOST_NOR_TEST=1 \
+ 		-Itests/stubs -Ifirmware/core -Ifirmware/realtek \
+ 		firmware/realtek/gwir_wbrg1_flash_port.c tests/test_wbrg1_flash_port.c -o build/test_wbrg1_flash_port_mock
+ 	./build/test_wbrg1_flash_port_mock

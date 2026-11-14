@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>GW006 IR Universal</title>
+<style>
+:root{color-scheme:dark;--bg:#0d141e;--panel:#182334;--stroke:#31445c;--ink:#edf2fa;--sub:#aebed2;--accent:#72b7ff;--green:#52d8a3}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px system-ui,-apple-system,sans-serif}
+header{padding:19px 18px 11px;max-width:840px;margin:auto}.top{display:flex;gap:12px;justify-content:space-between;align-items:center}
+h1{font-size:1.3rem;margin:0;letter-spacing:.01em}h2{font-size:1.05rem;margin:0 0 10px}
+.sub{font-size:.83rem;color:var(--sub)}main{max-width:840px;margin:auto;padding:0 16px 35px}
+.notice{margin:8px 0 15px;padding:12px;background:#26344a;border:1px solid var(--stroke);border-radius:12px;line-height:1.45;font-size:.89rem}
+.panel{background:var(--panel);border:1px solid var(--stroke);border-radius:16px;padding:15px;margin:12px 0}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:16px}
+button{font:inherit;background:#26374e;color:var(--ink);border:1px solid #425875;border-radius:11px;min-height:44px;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button[disabled]{opacity:.52;cursor:not-allowed}.tab{font-size:.82rem;padding:8px 3px}.tab[aria-selected="true"]{background:#1d4c80;border-color:#82beff}
+.controls{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.key{min-height:64px;position:relative;padding:9px 3px;font-weight:650;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.key .dot{position:absolute;right:6px;top:6px;width:7px;height:7px;background:#728296;border-radius:100%}
+.key .dot.saved{background:var(--green);box-shadow:0 0 8px #52d8a377}
+.key:active{background:#385c83}input{background:#0b1625;color:var(--ink);border:1px solid var(--stroke);padding:12px;border-radius:9px;width:100%;min-width:0}
+label{display:block;margin:11px 0 3px;font-size:.84rem;color:var(--sub)}.action{padding:9px 15px}.buttonRow{margin-top:12px}.primary{background:#225994;border-color:#6bb0f5}
+.muted{color:var(--sub)}small{font-size:.76rem}#msg{min-height:25px;font-size:.88rem;line-height:1.5;margin:10px 2px}
+dialog{background:#182435;color:var(--ink);border:1px solid #6488b1;border-radius:16px;width:min(420px,calc(100% - 24px));padding:20px}
+dialog::backdrop{background:#000b}.menuActions{display:grid;gap:10px}#preview{white-space:pre-wrap;font-size:.84rem;color:var(--sub);margin-top:8px}
+@media(min-width:650px){.grid{grid-template-columns:repeat(6,minmax(0,1fr))}.key{min-height:75px}}
+</style>
+</head>
+<body>
+<header>
+<div class="top"><div><h1>GW006 IR Universal</h1><div class="sub">Telecomandi autonomi nel browser · 96 tasti</div></div><span id="state" class="sub" role="status">Disconnesso</span></div>
+<div class="tabs" role="tablist" aria-label="Telecomandi">
+<button class="tab" role="tab" data-tab="0" aria-selected="true">TV · 36</button>
+<button class="tab" role="tab" data-tab="1" aria-selected="false">Clima · 14</button>
+<button class="tab" role="tab" data-tab="2" aria-selected="false">Decoder · 32</button>
+<button class="tab" role="tab" data-tab="3" aria-selected="false">Speaker · 14</button>
+</div>
+</header>
+<main>
+<div id="warning" class="notice" role="alert">Verifica sicurezza in corso. I comandi IR restano disabilitati senza una connessione HTTPS e credenziali verificate.</div>
+<section class="panel" aria-label="Connessione">
+<h2>Collegamento protetto</h2>
+<div class="sub">La chiave personale e il nonce devono provenire da un canale affidabile, non da una pagina HTTP. Non vengono salvati nel browser.</div>
+<label for="key">Chiave per dispositivo (64 caratteri esadecimali)</label>
+<input id="key" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="Chiave HMAC" disabled>
+<label for="nonce">Nonce di avvio verificato (32 caratteri esadecimali)</label>
+<input id="nonce" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="Nonce per questa accensione" disabled>
+<div class="row buttonRow">
+<button id="pair" class="action primary" disabled>Autentica</button>
+<button id="refresh" class="action" disabled>Aggiorna memoria</button>
+<button id="disconnect" class="action" disabled>Disconnetti</button>
+</div>
+</section>
+<section class="panel" aria-label="Telecomando">
+<div class="controls"><h2 id="remote-title">Televisore · 36 tasti</h2><span id="count" class="sub">0 memorizzati</span></div>
+<p class="sub">Tocco breve: invia il codice salvato. Pressione prolungata (3 s): menu acquisizione, prova, salvataggio ed eliminazione.</p>
+<div id="buttons" class="grid"></div>
+</section>
+<p id="msg" role="status" aria-live="polite"></p>
+<dialog id="menu" aria-labelledby="menu-title">
+<h2 id="menu-title">Gestione tasto</h2><div id="preview"></div>
+<div class="menuActions">
+<button id="learn" class="action">Inizia acquisizione IR</button>
+<button id="stopLearn" class="action">Ferma e leggi i pacchetti</button>
+<button id="try" class="action">Prova codice salvato</button>
+<button id="save" class="action" disabled>Salva (1–5 pacchetti)</button>
+<button id="discard" class="action" disabled>Scarta acquisizione</button>
+<button id="delete" class="action">Elimina codice salvato</button>
+<button id="close" class="action">Chiudi</button>
+</div>
+</dialog>
+</main>
+<script>/*GWIR_INLINE_SCRIPT*/</script>
+</body>
+</html>

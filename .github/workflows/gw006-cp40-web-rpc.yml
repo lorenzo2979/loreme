@@ -1,0 +1,70 @@
+name: GW006 CP40 - browser RPC signed transport checks (NO FLASH)
+on:
+  push:
+    branches: [review/gw006-realtek-flash-hal]
+    paths:
+      - '.github/workflows/gw006-cp40-web-rpc.yml'
+      - 'firmware/core/gwir_web_rpc.*'
+      - 'tests/test_gwir_web_rpc.c'
+      - 'firmware/core/gwir_web_http_post.*'
+      - 'tests/test_gwir_web_http_post.c'
+      - 'firmware/realtek/gwir_amebad_auth_server.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  web-rpc-host:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify pinned source and extract only trusted public headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '1a97c5f571c85224ea5df923bbf114addb3acea8bf1b65cbf35f3d653c168044  source_bundles/GW006_WBRG1_STORAGE_PORT_SOURCE_ONLY.zip' | sha256sum -c -
+          mkdir -p build/cp40-base
+          python3 - <<'PY'
+          from pathlib import Path, PurePosixPath
+          from zipfile import ZipFile
+          p=Path('source_bundles/GW006_WBRG1_STORAGE_PORT_SOURCE_ONLY.zip')
+          out=Path('build/cp40-base')
+          with ZipFile(p) as z:
+              for m in z.infolist():
+                  rel=PurePosixPath(m.filename)
+                  if (m.is_dir() or rel.is_absolute() or '..' in rel.parts or
+                      not ((m.filename.startswith('firmware/core/') and
+                            (m.filename.endswith('.h') or
+                             m.filename == 'firmware/core/gwir_protocol.c')) or
+                           m.filename == 'firmware/realtek/gwir_amebad_auth_server.h')):
+                      continue
+                  dest=out/m.filename
+                  dest.parent.mkdir(parents=True,exist_ok=True)
+                  dest.write_bytes(z.read(m))
+          assert (out/'firmware/core/gwir_runtime_owner.h').exists()
+          assert (out/'firmware/core/gwir_protocol.c').exists()
+          print('LOCKED_HEADERS=PASS')
+          PY
+      - name: Compile real bridge against pinned protocol headers and check reject paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Ifirmware/core -Ibuild/cp40-base/firmware/core \
+            firmware/core/gwir_web_rpc.c \
+            build/cp40-base/firmware/core/gwir_protocol.c \
+            tests/test_gwir_web_rpc.c \
+            -o build/gwir_web_rpc_host_test
+          ./build/gwir_web_rpc_host_test
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Ifirmware/core -Ibuild/cp40-base/firmware/core \
+            firmware/core/gwir_web_http_post.c \
+            tests/test_gwir_web_http_post.c \
+            -o build/gwir_web_http_header_test
+          ./build/gwir_web_http_header_test
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Ifirmware/realtek -Ifirmware/core \
+            -Ibuild/cp40-base/firmware/realtek \
+            -Ibuild/cp40-base/firmware/core \
+            -c firmware/realtek/gwir_amebad_auth_server.c \
+            -o build/gwir_auth_server_browser_single_owner.o
+          echo 'WEB_RPC_HTTP_AND_SINGLE_OWNER_SOCKET_COMPILE=PASS; NOT AN INSTALLABLE IMAGE'

@@ -1,0 +1,34 @@
+--- a/firmware/core/gwir_protocol.h
++++ b/firmware/core/gwir_protocol.h
+@@ -29,2 +29,3 @@
+     GWIR_STORE_INFO = 14, /* payload empty; bitmap 96 button records */
++    GWIR_STORE_ABORT = 15, /* cancel staged upload, wipe scratch; no NOR write */
+     GWIR_HELLO_REPLY = 0x81,
+--- a/firmware/core/gwir_auth_dispatch.c
++++ b/firmware/core/gwir_auth_dispatch.c
+@@ -26,3 +26,3 @@
+     if (handler && (decoded.command == GWIR_TX_SAVED ||
+                     (decoded.command >= GWIR_STORE_BEGIN &&
+-                     decoded.command <= GWIR_STORE_INFO))) {
++                     decoded.command <= GWIR_STORE_ABORT))) {
+--- a/firmware/core/gwir_saved_play_command.c
++++ b/firmware/core/gwir_saved_play_command.c
+@@ -139,1 +139,13 @@
+-    case GWIR_STORE_DELETE:
++    case GWIR_STORE_ABORT:
++        /* The only recovery from interrupted BEGIN/CHUNK, without reboot.
++         * Never erase committed NOR data; wipe only the staging buffer.
++         * The reply is protected by the same HMAC and anti-replay counter. */
++        if (msg->payload_len != 1u) break;
++        if (!s->upload_active || s->upload_button != button) {
++            status = GWIR_NOT_READY;
++            break;
++        }
++        upload_reset(s);
++        status = GWIR_OK;
++        break;
++    case GWIR_STORE_DELETE:
+@@ -192,2 +203,2 @@
+-    if (msg->command >= GWIR_STORE_BEGIN && msg->command <= GWIR_STORE_INFO)
++    if (msg->command >= GWIR_STORE_BEGIN && msg->command <= GWIR_STORE_ABORT)
+         return upload_command(service, msg, engine, response,

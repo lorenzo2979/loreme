@@ -1,0 +1,77 @@
+--- a/firmware/core/gwir_protocol.h
++++ b/firmware/core/gwir_protocol.h
+@@ -12,7 +12,7 @@
+ #define GWIR_MAX_PAYLOAD (GWIR_RX_FIXED_BYTES + GWIR_MAX_PULSES_PER_FRAME * 4u)
+ #define GWIR_MAX_MESSAGE (GWIR_HEADER_SIZE + GWIR_MAX_PAYLOAD)
+ 
+-/* The 96 button identities and their nonvolatile code storage belong to Android. */
++/* GW006 retains all 96 button records in flash; Android controls and synchronizes them. */
+ enum gwir_command {
+     GWIR_HELLO = 1,
+     GWIR_RX_ARM = 2,
+@@ -22,11 +22,18 @@
+     GWIR_PING = 6,
+     GWIR_RX_STATS = 7,
+     GWIR_RX_ACK = 8, /* payload: uint32_t capture ID; only ACK removes frame */
+-    GWIR_TX_SAVED = 9, /* CP29: payload one byte, persistent button 0..95; authenticated only */
++    GWIR_TX_SAVED = 9, /* authenticated persistent playback */
++    GWIR_STORE_BEGIN = 10, /* authenticated upload: button:u8,total_bytes:u32be */
++    GWIR_STORE_CHUNK = 11, /* button:u8,offset:u32be,payload:nonempty bytes */
++    GWIR_STORE_COMMIT = 12, /* button:u8; validate CRC then atomic NOR journal put */
++    GWIR_STORE_DELETE = 13, /* button:u8; atomic NOR journal delete */
++    GWIR_STORE_INFO = 14, /* payload empty; bitmap 96 button records */
+     GWIR_HELLO_REPLY = 0x81,
+     GWIR_RX_DATA = 0x85,
+     GWIR_STATUS = 0x90,
+     GWIR_SAVED_STATUS = 0x91, /* payload: status byte + frames completed */
++    GWIR_STORE_STATUS = 0x92, /* status:u8,button:u8,active:u8,received:u32be */
++    GWIR_STORE_INFO_REPLY = 0x93, /* status:u8,96-button bitmap:12 bytes */
+     GWIR_PONG = 0x86,
+     GWIR_RX_STATS_REPLY = 0x87
+ };
+--- a/firmware/core/gwir_auth_dispatch.c
++++ b/firmware/core/gwir_auth_dispatch.c
+@@ -22,7 +22,9 @@
+     size_t unsigned_len=0u;
+     gwir_message decoded;
+     if (gwir_decode(inner, inner_len, &decoded)) return GWIR_AUTH_REJECT;
+-    if (decoded.command == GWIR_TX_SAVED && handler) {
++    if (handler && (decoded.command == GWIR_TX_SAVED ||
++                    (decoded.command >= GWIR_STORE_BEGIN &&
++                     decoded.command <= GWIR_STORE_INFO))) {
+         if (handler(handler_ctx, &decoded, engine, scratch, scratch_cap,
+                     &unsigned_len)) return GWIR_AUTH_REJECT;
+     } else {
+--- a/firmware/core/gwir_saved_play_command.h
++++ b/firmware/core/gwir_saved_play_command.h
+@@ -25,6 +25,15 @@
+     uint8_t last_status;
+     uint8_t last_frames_done;
+     uint8_t last_valid;
++    /* Optional RAM staging buffer: min 41,040 bytes. Dedicated static memory,
++     * not a FreeRTOS task stack; never write to NOR until valid COMMIT.
++     * At most one transaction per serialized authenticated owner session. */
++    uint8_t *upload_scratch;
++    size_t upload_capacity;
++    uint32_t upload_size;
++    uint32_t upload_received;
++    uint8_t upload_button;
++    uint8_t upload_active;
+ } gwir_saved_play_service;
+ 
+ /* Explicitly initialize the per-boot service and clear cached sequence state.
+@@ -34,6 +43,14 @@
+                          gwir_fj_store *store, const gwir_fj_play_ops *ir,
+                          uint32_t *pulse_scratch, size_t pulse_capacity);
+ 
++/* Opt in to authenticated save/delete/status commands after journal mount.
++ * Caller allocates static scratch of at least GWIR_GWCD_MAX_SIZE bytes,
++ * owned exclusively by the authenticated runtime, not by DMA/ISR.
++ * Returns -1 for invalid arguments; not enabled by default. */
++int gwir_saved_play_enable_upload(gwir_saved_play_service *service,
++                                 uint8_t *upload_scratch,
++                                 size_t upload_capacity);
++
+ /* Respond with GWIR_SAVED_STATUS: two-byte payload [status,frames_done].
+  * Nonzero result means response buffer/contract failure; closes connection.
+  * A signed error status is returned for missing/unready IR hardware. */

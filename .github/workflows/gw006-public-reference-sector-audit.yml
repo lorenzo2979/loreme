@@ -1,0 +1,105 @@
+name: GW006 WBRG1 public dump structural audit (READ ONLY)
+on:
+  push:
+    branches:
+      - review/gw006-realtek-flash-hal
+    paths:
+      - .github/workflows/gw006-public-reference-sector-audit.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reference-audit:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Compare SHA-pinned public WBRG1 8MiB dumps without storing raw files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reference-report
+          python3 - <<'PY'
+          from urllib.request import Request, urlopen
+          from urllib.parse import quote
+          import hashlib, json
+          BASE = "https://raw.githubusercontent.com/openshwprojects/FlashDumps/main/"
+          refs = [
+            ("tuya_gateway_172", "IoT/RTL8721CSM/Tuya-Gateway-20250219-(8721csm_bt_zg_gw)_keym557nqw3p8p7m_tcd2siztvrth66he_WBRG1_1.7.2-p.kaczmarek2.bin", "aaf9b4a0072c7203c705ad66a6000a709e1549c8"),
+            ("tuya_gw018_dm_162", "IoT/RTL8721CSM/Tuya_GW018-DM_WiFi+BT+ZG_Gateway_(schemaID-euwqr8)_keym557nqw3p8p7m_dmmv7eacvbyyg9gl_WBRG1_1.6.2-pvvx.bin", "bcc5956c302c4fae7df214ead8a4286ff1d5c481"),
+            ("tuya_maginon_172", "IoT/RTL8721CSM/Tuya_Maginon_WT-2G_ZB_TRV_(schemaID- fty1s0)_keym557nqw3p8p7m_jqhfckegicggcmxg_WBRG1_1.7.2-maxrower.bin", "8de00cba53160207e50d537673ba0a5dea3d1541"),
+            ("tuya_tygwzb_182", "IoT/RTL8721CSM/Tuya_TYGWZB-01N_WiFi+BT+ZG_Gateway_(8721csm_bt_zg_gw)_keym557nqw3p8p7m_wokjxeds5avjr2l3_WBRG1_1.8.2-insmod.bin", "73e55af4cd58a88ea81b7c75d77cb3386ce29afa")
+          ]
+          sector = 4096
+          flash_size = 8388608
+          images = []
+          for label, path, expected_git_sha in refs:
+            url = BASE + quote(path, safe="/")
+            with urlopen(Request(url, headers={"User-Agent":"GW006-structural-audit"}), timeout=120) as connection:
+              b = connection.read(flash_size+1)
+            if len(b) != flash_size:
+              raise ValueError("Wrong 8MiB image size for "+label)
+            actual_sha = hashlib.sha1(b"blob "+str(len(b)).encode()+b"\x00"+b).hexdigest()
+            if actual_sha != expected_git_sha:
+              raise ValueError("Git object hash mismatch for "+label)
+            images.append((label,b))
+          mask_identical=[]
+          mask_all_ff=[]
+          mask_any_ff=[]
+          per_reference=[]
+          for label, b in images:
+            blank=sum(b[i:i+sector] == b"\xff"*sector for i in range(0,flash_size,sector))
+            per_reference.append({"name":label,"sha256":hashlib.sha256(b).hexdigest(),"erased_4k_sectors":blank})
+          for pos in range(0,flash_size,sector):
+            chunks=[b[pos:pos+sector] for _,b in images]
+            is_ff=[chunk == b"\xff"*sector for chunk in chunks]
+            mask_identical.append(all(chunk==chunks[0] for chunk in chunks[1:]))
+            mask_all_ff.append(all(is_ff))
+            mask_any_ff.append(any(is_ff))
+          def runs(mask):
+            result=[]; start=None
+            for index, active in enumerate(mask+[False]):
+              if active and start is None:
+                start=index
+              elif not active and start is not None:
+                result.append({"offset_hex":hex(start*sector),"bytes":(index-start)*sector,"sectors":index-start})
+                start=None
+            return sorted(result,key=lambda x:x["sectors"],reverse=True)[:20]
+          report={
+            "source":"openshwprojects/FlashDumps IoT/RTL8721CSM",
+            "flash_bytes":flash_size,"sector_bytes":sector,
+            "references_verified":len(images),
+            "git_blob_sha1_verified":True,
+            "identical_4k_sectors":sum(mask_identical),
+            "variable_4k_sectors":len(mask_identical)-sum(mask_identical),
+            "erased_in_every_reference_4k_sectors":sum(mask_all_ff),
+            "erased_in_one_or_more_references_4k_sectors":sum(mask_any_ff),
+            "common_regions_not_proven_unused":runs(mask_identical),
+            "variable_regions":runs([not x for x in mask_identical]),
+            "all_ff_regions_not_proven_unused":runs(mask_all_ff),
+            "rejected_proposed_5mib_ir_partition": {
+              "start_hex":"0x200000","end_exclusive_hex":"0x700000",
+              "non_erased_4k_sectors_by_reference": {
+                 label:sum(b[p:p+sector] != b"\xff"*sector for p in range(0x200000,0x700000,sector))
+                 for label,b in images
+              },
+              "approved":False,
+              "warning":"A previously proposed 5MiB region overlaps real used sectors in public WBRG1 references and MUST NOT be enabled."
+            },
+            "images":per_reference,
+            "target_gw006_flash_read":False,
+            "flash_partition_authorized":False,
+            "safe_to_flash":False,
+            "warning":"Public dumps are NOT the owner's GW006 backup. Never copy device-specific credentials, calibration or keys. FF/common sectors do not prove free space. No flash, no erase."
+          }
+          with open("reference-report/wbrg1_public_structural_comparison.json","w") as f:
+            json.dump(report,f,indent=2)
+          with open("reference-report/README_NOT_FOR_FLASH.txt","w") as f:
+            f.write("Aggregated public WBRG1 reference comparison only. Source binaries contain third-party keys and are NOT distributed. This report is NOT a partition map or flash authorization.\n")
+          print("PASS: "+str(len(images))+" public 8MiB WBRG1 flash references validated via Git blob SHA1; aggregate report generated. DO NOT FLASH.")
+          PY
+      - name: Publish aggregate comparison only; never upload source dump bytes
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-wbrg1-public-flash-comparison-READ-ONLY
+          path: reference-report/
+          retention-days: 14
