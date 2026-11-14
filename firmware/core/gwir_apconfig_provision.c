@@ -110,7 +110,7 @@ static int validate_duckdns(const gwir_provision_profile *p)
         return (!p->duckdns_host[0] && !p->duckdns_token[0]) ? 0 : -1;
     if (!p->secure_transport_verified) return -1;
     while (n < sizeof(p->duckdns_host) && p->duckdns_host[n]) ++n;
-    if (n >= sizeof(p->duckdns_host) || n <= sizeof(suffix) ||
+    if (n >= sizeof(p->duckdns_host) || n < sizeof(suffix) ||
         n > 63u + sizeof(suffix) - 1u)
         return -1;
     const size_t label = n - (sizeof(suffix) - 1u);
@@ -244,11 +244,39 @@ int gwir_provision_parse_form(const uint8_t *body, size_t length,
     return gwir_provision_parse_form_secure(body, length, out, 0);
 }
 
+/* The public apply API may receive a user-created struct, not necessarily
+ * a parser output. Verify all strings are terminated BEFORE parsing them.
+ * This prevents a malformed caller from walking beyond fixed-size fields. */
+static int zero_terminated(const char *value, size_t capacity)
+{
+    for (size_t i = 0u; i < capacity; ++i)
+        if (!value[i]) return 1;
+    return 0;
+}
+
+static int profile_storage_safe(const gwir_provision_profile *p)
+{
+    if (p->use_dhcp > 1u || p->is_open > 1u ||
+        p->duckdns_enabled > 1u || p->secure_transport_verified > 1u)
+        return 0;
+    return zero_terminated(p->ssid, sizeof(p->ssid)) &&
+           zero_terminated(p->password, sizeof(p->password)) &&
+           zero_terminated(p->ipv4, sizeof(p->ipv4)) &&
+           zero_terminated(p->netmask, sizeof(p->netmask)) &&
+           zero_terminated(p->gateway, sizeof(p->gateway)) &&
+           zero_terminated(p->dns1, sizeof(p->dns1)) &&
+           zero_terminated(p->dns2, sizeof(p->dns2)) &&
+           zero_terminated(p->duckdns_host, sizeof(p->duckdns_host)) &&
+           zero_terminated(p->duckdns_token, sizeof(p->duckdns_token));
+}
+
 int gwir_provision_apply(const gwir_provision_profile *profile,
                           const gwir_provision_ops *ops)
 {
     if (!profile || !ops || !ops->stage || !ops->verify ||
         !ops->commit || !ops->rollback) return -1;
+    if (!profile_storage_safe(profile))
+        return -2;
     if (validate_network(profile) || validate_duckdns(profile))
         return -2;
     if (profile->ssid[0] == 0 || profile->ssid[GWIR_PROVISION_SSID_MAX] != 0 ||
