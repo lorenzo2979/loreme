@@ -15,6 +15,7 @@
 #include <FlashMemory.h>
 #include "src/gw006_ameba_authenticated_tcp.h"
 #include "src/gw006_ameba_hmac.h"
+#include "src/gw006_ameba_runtime.h"
 extern "C" {
 #include "src/gwir_engine.h" // actual shared C engine compiled under src/
 #include "src/gwir_runtime_owner.h" // signed GWAS, persistent 96-button NOR journal
@@ -56,7 +57,12 @@ void gw006_amebad_link_only_probe(void) {
  * board package. Keep the ~50KB five-frame RX engine out of the limited
  * KM4 SRAM BSS; never allocate it on a FreeRTOS task stack. */
 static gwir_engine s_gwir_engine __attribute__((section(".psram.bss")));
-static Gw006AmebaAuthenticatedTcp s_signed_tcp;
+/* A trusted board-specific provisioner may supply Wi-Fi credentials, a
+ * device-unique HMAC key, a fresh boot nonce and hardware approval.
+ * There is deliberately NO fixed secret or default credential. */
+extern "C" bool gw006_load_verified_boot_material(Gw006AmebaBootMaterial *)
+    __attribute__((weak));
+static Gw006AmebaRuntime s_runtime;
 /* Real 21-module native IR HAL: check only metadata and fail-closed
  * hardware state. No GPIO pinmux or IRQ is activated by this test. */
 static bool gw006_native_ir_contract_selftest(void) {
@@ -130,10 +136,17 @@ void setup() {
     Serial.println(gw006_crypto_selftest()
                    ? "GW006 AMEBAD REALTEK HMAC-SHA256 VECTOR PASS"
                    : "GW006 AMEBAD REALTEK HMAC-SHA256 VECTOR FAILED");
+    Gw006AmebaBootMaterial config = {};
+    if (gw006_load_verified_boot_material &&
+        gw006_load_verified_boot_material(&config)) {
+        if (!s_runtime.begin(config))
+            Serial.println("GW006 BOARD RUNTIME STARTUP REFUSED");
+    } else {
+        Serial.println("GW006 UNPROVISIONED: IR/FLASH/WIFI NOT ACTIVATED");
+    }
+    memset(&config, 0, sizeof(config));
 }
 void loop() {
-    /* No listener until a trusted board port provisions key + fresh nonce,
-     * an exclusive flash journal, physical IR and station Wi-Fi. */
-    s_signed_tcp.poll();
+    s_runtime.poll();
     delay(2);
 }
