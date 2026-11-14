@@ -11,7 +11,7 @@ const sets=[
 if(sets.map(x=>x[1].length).join(",")!=="36,14,32,14") throw Error("96 keys expected");
 const offsets=[0,36,50,82];
 const allowed=secureBrowserGate(location.protocol,globalThis.crypto?.subtle);
-let tab=0, selected=-1, client=null, flags=Array(96).fill(false), staged=[], armed=false, pending=false;
+let tab=0, selected=-1, client=null, flags=Array(96).fill(false), staged=[], armed=false, pending=false, saving=false;
 const report=s=>{$("msg").textContent=s;};
 function redraw() {
  const [label,keys]=sets[tab], offset=offsets[tab], area=$("buttons");
@@ -45,8 +45,8 @@ function redraw() {
 function controls(){
  const active=!!client?.key;
  for(const id of ["key","nonce","pair"]) $(id).disabled=!allowed||active;
- $("refresh").disabled=!active||pending;
- $("disconnect").disabled=!active||pending;
+ $("refresh").disabled=!active||pending||saving;
+ $("disconnect").disabled=!active||pending||saving;
 }
 async function refresh(){
  if(!client?.key||pending)return;
@@ -104,7 +104,8 @@ $("stopLearn").onclick=()=>void action(async()=>{
  $("learn").disabled=!!first;
 });
 $("save").onclick=()=>void action(async()=>{
- if(!client?.key||selected<0||!staged.length)throw Error("Nessun pacchetto in attesa");
+ if(!client?.key||selected<0||!staged.length||saving)throw Error("Nessun pacchetto in attesa o salvataggio occupato");
+ saving=true;controls();
  $("save").disabled=true;
  $("discard").disabled=true;
  let parts=[], savedCount=0;
@@ -129,11 +130,13 @@ $("save").onclick=()=>void action(async()=>{
    $("learn").disabled=false;
    $("delete").disabled=false;
  } finally {
+   saving=false;controls();
    $("save").disabled=!staged.length;
    $("discard").disabled=!staged.length;
  }
 });
 $("discard").onclick=()=>void action(async()=>{
+ if(saving)throw Error("Salvataggio in corso");
  if(!client?.key||!staged.length)return;
  if(!confirm("Scartare i pacchetti acquisiti senza salvarli?"))return;
  for(let i=0;i<5;i++){
@@ -165,11 +168,11 @@ $("delete").onclick=()=>void action(async()=>{
  $("delete").disabled=true;$("preview").textContent="Eliminato con conferma firmata.";
 });
 $("close").onclick=()=>{
- if(armed||staged.length||pending){report("Prima salva o scarta l'acquisizione in attesa.");return;}
+ if(armed||staged.length||pending||saving){report("Prima salva o scarta l'acquisizione in attesa.");return;}
  $("menu").close();
 };
 $("menu").addEventListener("cancel",e=>{
- if(armed||staged.length||pending){e.preventDefault();report("Prima salva o scarta l'acquisizione in attesa.");}
+ if(armed||staged.length||pending||saving){e.preventDefault();report("Prima salva o scarta l'acquisizione in attesa.");}
 });
 document.querySelectorAll(".tab").forEach((b,i)=>b.onclick=()=>{
  if($("menu").open)return;
@@ -191,7 +194,7 @@ $("pair").onclick=()=>void(async()=>{
 })();
 $("refresh").onclick=()=>void refresh();
 $("disconnect").onclick=()=>{
- if(armed||staged.length||pending){report("Termina e salva o scarta l'acquisizione prima di disconnetterti.");return;}
+ if(armed||staged.length||pending||saving){report("Termina e salva o scarta l'acquisizione prima di disconnetterti.");return;}
  client?.clear();client=null;flags.fill(false);staged=[];armed=false;
  $("state").textContent="Disconnesso";report("Sessione chiusa; chiavi non salvate.");
  controls();redraw();
