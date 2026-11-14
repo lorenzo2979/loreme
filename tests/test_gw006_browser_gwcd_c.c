@@ -22,7 +22,7 @@ int main(int argc,char **argv){
     memrecord *r=calloc(1,sizeof(*r));
     assert(r);
     r->len=fread(r->data,1,sizeof(r->data),f);
-    assert(feof(f));
+    assert(fgetc(f)==EOF);
     assert(fclose(f)==0);
     assert(r->len==41040u);
     assert(gwir_gwcd_worst_case_bytes()==96u*41040u);
