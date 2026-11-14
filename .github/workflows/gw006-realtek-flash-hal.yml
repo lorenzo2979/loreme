@@ -89,7 +89,7 @@ jobs:
           p=Path('docs/CP21_SOURCE_MANIFEST.json')
           obj=json.loads(p.read_text())
           obj['files']=records(Path.cwd())
-          p.write_text(json.dumps(obj,indent=2)+'\\n')
+          p.write_text(json.dumps(obj,indent=2)+chr(10))
           PY
           python3 scripts/verify_release_sources.py
           make build/test_sdk_bootstrap
