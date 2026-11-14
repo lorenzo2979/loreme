@@ -80,6 +80,9 @@ jobs:
           python3 scripts/integrate_amebad_sdk.py --sdk "$sdk" --apply
           grep -F 'gwir_wbrg1_flash_port.c' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
           grep -F 'gwir_sdk_boot_schedule();' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/main.c"
+      - name: Record native build start for fresh link evidence
+        shell: bash
+        run: touch "$RUNNER_TEMP/gwir_native_started"
       - name: Native KM0 build
         shell: bash
         run: |
@@ -94,6 +97,28 @@ jobs:
           sdk="$RUNNER_TEMP/ameba-rtos-d/project/realtek_amebaD_va0_example/GCC-RELEASE"
           timeout 1500 make -C "$sdk/project_hp" all > km4.log 2>&1 || { tail -140 km4.log; exit 1; }
           echo "KM4_NATIVE_BUILD=PASS"
+      - name: Audit REAL ARM final link (42 source modules, NO FLASH)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p native-link-inspection
+          sdk="$RUNNER_TEMP/ameba-rtos-d"
+          python3 scripts/verify_native_km4_link_map.py --sdk "$sdk" \
+             --build-start-file "$RUNNER_TEMP/gwir_native_started" \
+             --output native-link-inspection/FINAL_LINK_REPORT.json \
+             > native-link-inspection/FINAL_LINK_LOG.txt 2>&1 || \
+              echo 'LINK_GATE_NOT_PASSED=SEE_REPORT' | tee -a native-link-inspection/FINAL_LINK_LOG.txt
+          image="$sdk/project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk/image"
+          cp "$image/text_image2_ns.map" native-link-inspection/
+          cp "$image/target_img2.axf" native-link-inspection/
+          (cd native-link-inspection && sha256sum text_image2_ns.map target_img2.axf > SHA256SUMS.txt)
+      - name: Upload Realtek final-link inspection (DO NOT INSTALL)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-final-link-inspection-NO-FLASH
+          path: native-link-inspection/
+          retention-days: 14
       - name: Capture VENDOR-built firmware images as NON-INSTALLABLE proof
         shell: bash
         run: |
