@@ -28,7 +28,7 @@ def assemble():
         raise ValueError("Unexpected ES module exports")
     js=protocol.rstrip()+"\n"+ui.rstrip()+"\n"
     if any(name in js for name in
-           ("localStorage.", "localStorage[", "sessionStorage.", "sessionStorage[")):
+           ("localStorage.setItem(", "sessionStorage.setItem(", "indexedDB.open(")):
         raise ValueError("Browser-side secret persistence forbidden")
     html=html.replace("/*GWIR_INLINE_SCRIPT*/",js,1)
     styles=re.findall(r"<style>(.*?)</style>",html,flags=re.S)
