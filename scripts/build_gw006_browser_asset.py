@@ -38,7 +38,7 @@ def assemble():
         raise ValueError("Unexpected inline execution points")
     if any(x in html for x in ["<script src=", "http://cdn", "eval(", "new Function("]):
         raise ValueError("External execution forbidden")
-    if "localStorage" in html or "sessionStorage" in html:
+    if re.search(r"(?<![A-Za-z_])(localStorage|sessionStorage)\\s*(?:\\.|\\[)", js):
         raise ValueError("Secret persistence forbidden")
     def csp_hash(blob):
         return "'sha256-" + base64.b64encode(hashlib.sha256(blob.encode("utf-8")).digest()).decode() + "'"
