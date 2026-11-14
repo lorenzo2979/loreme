@@ -1,0 +1,178 @@
+--- a/firmware/core/gwir_saved_play_command.c
++++ b/firmware/core/gwir_saved_play_command.c
+@@ -16,6 +16,161 @@
+     return 0;
+ }
+ 
++/* Existing journal read API uses bounded relative offsets. */
++static int upload_read(void *ctx, uint32_t offset, void *dst, size_t n)
++{
++    gwir_saved_play_service *s = (gwir_saved_play_service *)ctx;
++    if (!s || !s->upload_active || !dst || offset > s->upload_size ||
++        n > s->upload_size - offset || !s->upload_scratch) return -1;
++    memcpy(dst, s->upload_scratch + offset, n);
++    return 0;
++}
++
++static void upload_reset(gwir_saved_play_service *s)
++{
++    if (!s) return;
++    if (s->upload_scratch && s->upload_received <= s->upload_capacity)
++        memset(s->upload_scratch, 0, s->upload_received);
++    s->upload_size = s->upload_received = 0u;
++    s->upload_active = 0u;
++    s->upload_button = 0xFFu;
++}
++
++int gwir_saved_play_enable_upload(gwir_saved_play_service *service,
++                                 uint8_t *upload_scratch,
++                                 size_t upload_capacity)
++{
++    if (!service || !service->store || !service->pulse_scratch ||
++        !upload_scratch || upload_capacity < GWIR_GWCD_MAX_SIZE ||
++        (const void *)upload_scratch == (const void *)service->pulse_scratch ||
++        service->upload_active || service->upload_scratch)
++        return -1;
++    service->upload_scratch = upload_scratch;
++    service->upload_capacity = upload_capacity;
++    return 0;
++}
++
++static int store_reply(uint8_t *response, size_t cap, uint32_t seq,
++                       uint8_t status, const gwir_saved_play_service *s,
++                       size_t *out)
++{
++    uint8_t b[7];
++    b[0] = status;
++    b[1] = s && s->upload_active ? s->upload_button : 0xFFu;
++    b[2] = s && s->upload_active ? 1u : 0u;
++    gwir_write_u32be(b + 3, s && s->upload_active ? s->upload_received : 0u);
++    return gwir_encode(response, cap, GWIR_STORE_STATUS, seq, b, sizeof(b), out);
++}
++
++static int store_info(gwir_saved_play_service *s, const gwir_message *msg,
++                      uint8_t *response, size_t cap, size_t *out)
++{
++    uint8_t b[13] = {0};
++    b[0] = GWIR_NOT_READY;
++    if (msg->payload_len != 0u || msg->sequence == 0u) b[0] = GWIR_BAD_REQUEST;
++    else if (s && s->store && s->store->ready) {
++        b[0] = GWIR_OK;
++        for (unsigned i = 0; i < GWIR_FJ_RECORDS; ++i) {
++            uint32_t off = 0, len = 0;
++            int rc = gwir_fj_lookup(s->store, (uint8_t)i, &off, &len);
++            if (rc == 0) b[1 + i / 8] |= (uint8_t)(1u << (i % 8));
++            else if (rc != 1) { b[0] = GWIR_STORAGE_ERROR; break; }
++        }
++        if (b[0] != GWIR_OK) memset(b + 1, 0, 12);
++    }
++    return gwir_encode(response, cap, GWIR_STORE_INFO_REPLY, msg->sequence,
++                       b, sizeof(b), out);
++}
++
++static int upload_command(gwir_saved_play_service *s,
++                          const gwir_message *msg, gwir_engine *engine,
++                          uint8_t *response, size_t capacity, size_t *out)
++{
++    uint8_t status = GWIR_BAD_REQUEST;
++    int rc;
++    uint8_t button;
++    if (!msg || !response || !out) return -1;
++    if (msg->command == GWIR_STORE_INFO)
++        return store_info(s, msg, response, capacity, out);
++    if (!msg->payload || msg->payload_len < 1u || msg->sequence == 0u ||
++        msg->payload[0] >= GWIR_FJ_RECORDS)
++        return store_reply(response, capacity, msg->sequence, status, s, out);
++    button = msg->payload[0];
++    if (!s || !s->store || !s->store->ready || !s->upload_scratch ||
++        s->upload_capacity < GWIR_GWCD_MAX_SIZE) {
++        status = GWIR_NOT_READY;
++        return store_reply(response, capacity, msg->sequence, status, s, out);
++    }
++    if (!engine || engine->rx_armed) {
++        status = GWIR_BUSY;
++        return store_reply(response, capacity, msg->sequence, status, s, out);
++    }
++    switch (msg->command) {
++    case GWIR_STORE_BEGIN:
++        if (msg->payload_len == 5u) {
++            uint32_t size = gwir_read_u32be(msg->payload + 1);
++            if (size < GWIR_GWCD_MIN_SIZE || size > GWIR_GWCD_MAX_SIZE ||
++                size > s->upload_capacity) status = GWIR_RANGE;
++            else if (s->upload_active) status = GWIR_BUSY;
++            else {
++                s->upload_active = 1;
++                s->upload_button = button;
++                s->upload_size = size;
++                s->upload_received = 0;
++                status = GWIR_OK;
++            }
++        }
++        break;
++    case GWIR_STORE_CHUNK:
++        if (msg->payload_len < 6u) break;
++        if (!s->upload_active || button != s->upload_button) {
++            status = GWIR_NOT_READY;
++            break;
++        }
++        {
++            uint32_t offset = gwir_read_u32be(msg->payload + 1);
++            uint32_t len = msg->payload_len - 5u;
++            if (offset != s->upload_received ||
++                len > s->upload_size - s->upload_received) {
++                status = GWIR_RANGE;
++                break;
++            }
++            memcpy(s->upload_scratch + s->upload_received, msg->payload + 5, len);
++            s->upload_received += len;
++            status = GWIR_OK;
++        }
++        break;
++    case GWIR_STORE_COMMIT:
++        if (msg->payload_len != 1u) break;
++        if (!s->upload_active || button != s->upload_button ||
++            s->upload_received != s->upload_size) {
++            status = GWIR_NOT_READY;
++            break;
++        }
++        {
++            gwir_gwcd_index index;
++            if (gwir_gwcd_scan(upload_read, s, s->upload_size, button, &index)) {
++                status = GWIR_BAD_REQUEST;
++                break;
++            }
++            rc = gwir_fj_put(s->store, button, upload_read, s, s->upload_size);
++            if (rc != 0) { status = GWIR_STORAGE_ERROR; break; }
++            upload_reset(s);
++            status = GWIR_OK;
++        }
++        break;
++    case GWIR_STORE_DELETE:
++        if (msg->payload_len != 1u) break;
++        if (s->upload_active) { status = GWIR_BUSY; break; }
++        rc = gwir_fj_delete(s->store, button);
++        status = rc == 0 ? GWIR_OK : GWIR_STORAGE_ERROR;
++        break;
++    default:
++        break;
++    }
++    return store_reply(response, capacity, msg->sequence, status, s, out);
++}
++
+ int gwir_saved_play_command(void *ctx, const gwir_message *msg,
+                             gwir_engine *engine, uint8_t *response,
+                             size_t capacity, size_t *response_len)
+@@ -28,8 +183,12 @@
+     uint8_t result[2];
+     if (response_len) *response_len = 0u;
+     if (!msg || !engine || !response || !response_len ||
+-        msg->command != GWIR_TX_SAVED || capacity < GWIR_HEADER_SIZE + 2u)
++        capacity < GWIR_HEADER_SIZE + 13u)
+         return -1;
++    if (msg->command >= GWIR_STORE_BEGIN && msg->command <= GWIR_STORE_INFO)
++        return upload_command(service, msg, engine, response,
++                              capacity, response_len);
++    if (msg->command != GWIR_TX_SAVED) return -1;
+     if (msg->payload_len != 1u || !msg->payload ||
+         msg->payload[0] >= GWIR_FJ_RECORDS || msg->sequence == 0u)
+         goto encode;
