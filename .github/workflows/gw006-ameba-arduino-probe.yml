@@ -5,6 +5,7 @@ on:
     paths:
       - 'firmware/arduino/**'
       - 'scripts/sync_gw006_arduino_core.py'
+      - 'scripts/apply_gw006_storage_abort.py'
       - 'patches/gw006_authenticated_storage_*.patch'
       - 'patches/gw006_authenticated_store_implementation.patch'
       - '.github/workflows/gw006-ameba-arduino-probe.yml'
