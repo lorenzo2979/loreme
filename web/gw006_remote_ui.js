@@ -74,7 +74,8 @@ function showMenu(index,name) {
  $("try").disabled=!client?.key;
  $("delete").disabled=!client?.key||!flags[index];
  $("stopLearn").disabled=true;
- $("save").disabled=true; // GWCD+NOR has not been hardware-approved.
+ $("save").disabled=true;
+ $("discard").disabled=true;
  $("menu").showModal();
 }
 async function action(fn){
@@ -93,15 +94,57 @@ $("stopLearn").onclick=()=>void action(async()=>{
  if(!armed)return;
  await client.disarm();armed=false;
  $("stopLearn").disabled=true;
- for(let i=0;i<5;i++){
-   const frame=await client.readCapture();
-   if(frame===null)break;
-   staged.push(frame);
-   await client.ackCapture(frame.id);
+ const first=await client.readCapture();
+ staged=first?[first]:[];
+ $("preview").textContent=first?
+   "Primo pacchetto verificato: ancora nella coda IR. Premi Salva per memorizzare da 1 a 5 pacchetti, oppure Scarta.":
+   "Nessun pacchetto ricevuto.";
+ $("save").disabled=!first;
+ $("discard").disabled=!first;
+ $("learn").disabled=!!first;
+});
+$("save").onclick=()=>void action(async()=>{
+ if(!client?.key||selected<0||!staged.length)throw Error("Nessun pacchetto in attesa");
+ $("save").disabled=true;
+ $("discard").disabled=true;
+ let parts=[], savedCount=0;
+ try {
+   // COMMIT permanent GWCD, then ACK exactly that capture ID. This avoids
+   // silently losing captured frames on a network failure or device reboot.
+   for(let i=0;i<5;i++){
+     const current=staged[0];
+     if(!current)break;
+     parts.push(current.raw);
+     await client.saveCode(selected,parts);
+     await client.ackCapture(current.id);
+     savedCount++;
+     staged=[];
+     const next=i===4?null:await client.readCapture();
+     if(next)staged=[next];
+     if(!next)break;
+   }
+   flags[selected]=true;redraw();
+   $("preview").textContent=savedCount+" pacchetto/i salvati nella memoria permanente. "+
+     "È stata verificata la presenza del tasto tramite risposta autenticata.";
+   $("learn").disabled=false;
+   $("delete").disabled=false;
+ } finally {
+   $("save").disabled=!staged.length;
+   $("discard").disabled=!staged.length;
  }
- $("preview").textContent=staged.length+" pacchetto/i temporanei. "+
-   "Salvataggio non disponibile prima della verifica del formato GWCD e della Flash.";
- $("learn").disabled=false;
+});
+$("discard").onclick=()=>void action(async()=>{
+ if(!client?.key||!staged.length)return;
+ if(!confirm("Scartare i pacchetti acquisiti senza salvarli?"))return;
+ for(let i=0;i<5;i++){
+   const current=staged[0];
+   if(!current)break;
+   await client.ackCapture(current.id);
+   const next=await client.readCapture();
+   staged=next?[next]:[];
+ }
+ $("preview").textContent="Cattura scartata esplicitamente, nessun codice salvato.";
+ $("save").disabled=true;$("discard").disabled=true;$("learn").disabled=false;
 });
 $("try").onclick=()=>void action(async()=>{
  if(!client?.key||selected<0)throw Error("Non pronto");
@@ -122,11 +165,11 @@ $("delete").onclick=()=>void action(async()=>{
  $("delete").disabled=true;$("preview").textContent="Eliminato con conferma firmata.";
 });
 $("close").onclick=()=>{
- if(armed){report("Prima termina l'acquisizione.");return;}
+ if(armed||staged.length||pending){report("Prima salva o scarta l'acquisizione in attesa.");return;}
  $("menu").close();
 };
 $("menu").addEventListener("cancel",e=>{
- if(armed){e.preventDefault();report("Prima termina l'acquisizione.");}
+ if(armed||staged.length||pending){e.preventDefault();report("Prima salva o scarta l'acquisizione in attesa.");}
 });
 document.querySelectorAll(".tab").forEach((b,i)=>b.onclick=()=>{
  if($("menu").open)return;
@@ -148,6 +191,7 @@ $("pair").onclick=()=>void(async()=>{
 })();
 $("refresh").onclick=()=>void refresh();
 $("disconnect").onclick=()=>{
+ if(armed||staged.length||pending){report("Termina e salva o scarta l'acquisizione prima di disconnetterti.");return;}
  client?.clear();client=null;flags.fill(false);staged=[];armed=false;
  $("state").textContent="Disconnesso";report("Sessione chiusa; chiavi non salvate.");
  controls();redraw();
