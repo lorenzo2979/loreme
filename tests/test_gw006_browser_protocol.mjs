@@ -3,7 +3,7 @@ import {test} from "node:test";
 import {webcrypto} from "node:crypto";
 import {
  WIRE, cleanHex, crc32, encodeGwir, decodeGwir, secureBrowserGate,
- importKey, signGwas, verifyGwas, statusBitmap, GwirBrowserClient
+ importKey, signGwas, verifyGwas, statusBitmap, encodeGwcd, GwirBrowserClient
 } from "../web/gw006_protocol.mjs";
 
 const subtle=webcrypto.subtle;
@@ -111,4 +111,75 @@ test("No retry and no nonce/counter reset on lost network result",async()=>{
   assert.equal(calls,2);
   assert.equal(client.tx,2n);
   assert.equal(client.rx,0n);
+});
+
+
+test("GWCD v1 serializes 1 and five frames at exact firmware maximum",()=>{
+  const one=new Uint8Array(16);
+  const dv=new DataView(one.buffer);
+  dv.setUint32(0,38000,false);
+  dv.setUint16(4,333,false);
+  dv.setUint16(6,1,false);
+  dv.setUint32(8,25000,false);
+  dv.setUint32(12,900,false);
+  const rec=encodeGwcd(95,[one]);
+  assert.equal(rec.length,36);
+  assert.equal(new TextDecoder().decode(rec.subarray(0,4)),"GWCD");
+  assert.equal(hdr(rec,4),1);
+  assert.equal(hdr(rec,8),95);
+  assert.equal(hdr(rec,12),1);
+  assert.equal(hdr(rec,32),crc32(rec.subarray(0,32),new Uint8Array(0)));
+  const maxFrame=new Uint8Array(12+2048*4),d=new DataView(maxFrame.buffer);
+  d.setUint32(0,38000,false);d.setUint16(4,333,false);d.setUint16(6,2048,false);d.setUint32(8,25000,false);
+  for(let i=0;i<2048;i++)d.setUint32(12+4*i,1000+i,false);
+  const max=encodeGwcd(0,Array(5).fill(maxFrame));
+  assert.equal(max.length,41040);
+  assert.equal(hdr(max,41036),crc32(max.subarray(0,41036),new Uint8Array(0)));
+  assert.throws(()=>encodeGwcd(96,[one]),/GWCD/);
+  const bad=one.slice();new DataView(bad.buffer).setUint32(12,0,false);
+  assert.throws(()=>encodeGwcd(0,[bad]),/pulse/);
+});
+test("Signed GWCD staged upload: begin, chunks, commit, readback, no concurrent RPC",async()=>{
+ const key=await importKey(keyHex,subtle),nonce=cleanHex(nonceHex,16);
+ const frame=new Uint8Array(16),v=new DataView(frame.buffer);
+ v.setUint32(0,38000,false);v.setUint16(4,333,false);
+ v.setUint16(6,1,false);v.setUint32(8,25000,false);v.setUint32(12,900,false);
+ const expected=encodeGwcd(34,[frame]);
+ const received=new Uint8Array(expected.length);
+ let size=0,offset=0,active=false,commandLog=[],seqCounter=0n;
+ const fetcher=async(_url,init)=>{
+   const signed=new Uint8Array(init.body);
+   const inner=decodeGwir(signed.subarray(36,signed.length-32));
+   commandLog.push(inner.command);
+   let cmd=WIRE.storeStatus, p=new Uint8Array(7);
+   if(inner.command===WIRE.begin){
+     assert.equal(inner.payload[0],34);
+     size=hdr(inner.payload,1);offset=0;active=true;
+   }else if(inner.command===WIRE.chunk){
+     assert.equal(inner.payload[0],34);
+     assert.equal(hdr(inner.payload,1),offset);
+     const chunk=inner.payload.subarray(5);
+     received.set(chunk,offset);offset+=chunk.length;
+   }else if(inner.command===WIRE.commit){
+     assert.equal(size,expected.length);
+     assert.deepEqual(received,expected);
+     assert.equal(offset,size);
+     active=false;
+   }else if(inner.command===WIRE.info) {
+     cmd=WIRE.infoReply;p=new Uint8Array(13);p[1+(34>>3)]|=1<<(34&7);
+   }else throw Error("Unexpected upload opcode");
+   if(cmd===WIRE.storeStatus){
+     p[0]=0;p[1]=active?34:255;p[2]=active?1:0;
+     new DataView(p.buffer).setUint32(3,active?offset:0,false);
+   }
+   seqCounter++;
+   const data=await responseFor(signed,key,nonce,inner.sequence,seqCounter,{cmd,payload:p});
+   return {ok:true,headers:{get:()=>"application/octet-stream"},arrayBuffer:async()=>data.buffer};
+ };
+ const client=new GwirBrowserClient(fetcher,subtle,"https:");
+ await client.pair(keyHex,nonceHex);
+ assert.equal(await client.saveCode(34,[frame]),36);
+ assert.deepEqual(commandLog,[WIRE.begin,WIRE.chunk,WIRE.commit,WIRE.info]);
+ assert.equal(client.tx,4n);
+ assert.equal(client.uploading,false);
 });
