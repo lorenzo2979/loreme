@@ -6,7 +6,7 @@
 const te = new TextEncoder();
 const WIRE = Object.freeze({
   hello:1, arm:2, disarm:3, txFrame:4, read:5, ping:6, stats:7, ack:8,
-  saved:9, begin:10, chunk:11, commit:12, del:13, info:14,
+  saved:9, begin:10, chunk:11, commit:12, del:13, info:14, abort:15,
   helloReply:0x81, capture:0x85, status:0x90, savedStatus:0x91,
   storeStatus:0x92, infoReply:0x93, pong:0x86, statsReply:0x87
 });
@@ -208,9 +208,11 @@ class GwirBrowserClient {
         throw new Error("Storage transaction not confirmed");
     };
     this.uploading=true;
+    let beginAttempted=false, commitAttempted=false;
     try {
       const begin=new Uint8Array(5);
       begin[0]=button;put32(begin,1,record.length);
+      beginAttempted=true;
       check(await this._rpc(WIRE.begin,begin),1,0);
       const chunkMax=2048;
       for(let off=0;off<record.length;off+=chunkMax) {
@@ -219,11 +221,34 @@ class GwirBrowserClient {
         p[0]=button;put32(p,1,off);p.set(chunk,5);
         check(await this._rpc(WIRE.chunk,p),1,off+chunk.length);
       }
+      commitAttempted=true; // a lost commit reply is NEVER interpreted as failure-to-commit
       check(await this._rpc(WIRE.commit,Uint8Array.of(button)),0,0);
       const info=await this._rpc(WIRE.info);
       if(info.command!==WIRE.infoReply||!statusBitmap(info.payload)[button])
         throw new Error("Saved button missing from authenticated status");
       return record.length;
+    }catch(error) {
+      if (beginAttempted && !commitAttempted) {
+        // BEGIN/CHUNK may already have reached the device. Send a NEW signed
+        // command with a new anti-replay counter to wipe the RAM stage.
+        // Never retry a failed chunk, since its outcome may be unknown.
+        try {
+          const r=await this._rpc(WIRE.abort,Uint8Array.of(button));
+          const noStage=r.command===WIRE.storeStatus && r.payload.length===7 &&
+                        r.payload[1]===255 && r.payload[2]===0 &&
+                        be32(r.payload,3)===0;
+          if(!noStage || (r.payload[0]!==0 && r.payload[0]!==9))
+            throw new Error("Staging abort not confirmed");
+        }catch(abortError){
+          throw new Error("Save failed ("+error.message+
+                          "); RAM staging abort unconfirmed ("+abortError.message+
+                          "). Do not retry automatically");
+        }
+      }
+      if(commitAttempted)
+        throw new Error("Commit reply not verified ("+error.message+
+                        "). The save outcome is UNKNOWN; refresh status and do not retry automatically");
+      throw error;
     }finally{
       this.uploading=false;
       record.fill(0);
