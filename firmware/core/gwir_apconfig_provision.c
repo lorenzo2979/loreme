@@ -184,6 +184,11 @@ int gwir_provision_parse_form_secure(const uint8_t *body, size_t length,
         case K_PASS:
             decoded = decode_value(v,vlen,out->password,sizeof(out->password),1);
             if (decoded < 0 || (decoded != 0 && decoded < 8)) goto fail;
+            /* An OPEN AP + HTTP does not protect the HOME Wi-Fi password.
+             * Refuse any nonempty secret unless the transport has verified
+             * confidentiality AND device identity out of band. A form flag
+             * never decides trusted_secret_channel. */
+            if (decoded != 0 && !trusted_secret_channel) goto fail;
             out->is_open = (uint8_t)(decoded == 0);
             break;
         case K_MODE:
@@ -276,6 +281,11 @@ int gwir_provision_apply(const gwir_provision_profile *profile,
     if (!profile || !ops || !ops->stage || !ops->verify ||
         !ops->commit || !ops->rollback) return -1;
     if (!profile_storage_safe(profile))
+        return -2;
+    /* Also defend callers that bypass the HTML parser and construct a
+     * profile directly. A nonempty home Wi-Fi password needs a verified
+     * protected channel, exactly as a DuckDNS token does. */
+    if (profile->password[0] && !profile->secure_transport_verified)
         return -2;
     if (validate_network(profile) || validate_duckdns(profile))
         return -2;
