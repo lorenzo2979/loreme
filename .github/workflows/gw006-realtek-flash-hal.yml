@@ -75,6 +75,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # The old locked archive predates authenticated STORE commands;
+          # apply the tested core protocol before wiring secure boot.
+          git apply --check patches/gw006_authenticated_storage_protocol.patch
+          git apply --check patches/gw006_authenticated_store_implementation.patch
+          git apply patches/gw006_authenticated_storage_protocol.patch
+          git apply patches/gw006_authenticated_store_implementation.patch
           git apply --check patches/gw006_boot_storage_runtime.patch
           git apply --check patches/gw006_boot_storage_host_tests.patch
           git apply patches/gw006_boot_storage_runtime.patch
