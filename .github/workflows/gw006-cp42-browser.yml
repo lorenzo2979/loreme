@@ -1,0 +1,24 @@
+name: GW006 CP42 - browser WebCrypto protocol and 96-button tests (NO FLASH)
+on:
+  push:
+    branches: [review/gw006-realtek-flash-hal]
+    paths:
+      - "web/**"
+      - "tests/test_gw006_browser_protocol.mjs"
+      - ".github/workflows/gw006-cp42-browser.yml"
+      - "scripts/build_gw006_browser_asset.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Signed GWAS request/response and replay tests
+        run: node --test tests/test_gw006_browser_protocol.mjs
+      - name: Build restricted CSP gzip web asset
+        run: python3 scripts/build_gw006_browser_asset.py --check
