@@ -4,6 +4,9 @@ on:
     branches: [review/gw006-realtek-flash-hal]
     paths:
       - 'firmware/arduino/**'
+      - 'scripts/sync_gw006_arduino_core.py'
+      - 'patches/gw006_authenticated_storage_*.patch'
+      - 'patches/gw006_authenticated_store_implementation.patch'
       - '.github/workflows/gw006-ameba-arduino-probe.yml'
   workflow_dispatch:
 permissions:
@@ -14,14 +17,20 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
-      - name: Verify Arduino sketch uses the exact tested GWIR C engine sources
+      - name: Sync nine complete GWIR C modules from immutable release and patches
         shell: bash
         run: |
           set -euo pipefail
-          for file in gwir_protocol.c gwir_protocol.h gwir_engine.c gwir_engine.h; do
-            cmp "firmware/core/$file" "firmware/arduino/GW006_Ameba_Probe/src/$file"
-          done
-          echo 'GW006_ARDUINO_SHARED_C_SOURCE_IDENTICAL=PASS'
+          python3 scripts/sync_gw006_arduino_core.py
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('firmware/arduino/GW006_Ameba_Probe/src')
+          sources=sorted(root.glob('gwir_*.c'))
+          assert len(sources)==9, [p.name for p in sources]
+          assert 'GWIR_STORE_ABORT = 15' in (root/'gwir_protocol.h').read_text()
+          assert 'case GWIR_STORE_ABORT:' in (root/'gwir_saved_play_command.c').read_text()
+          print('GW006_ARDUINO_AUTH_STORE_IR_MODULE_SYNC=PASS')
+          PY
       - uses: arduino/setup-arduino-cli@v2
       - name: Install official Realtek AmebaD Arduino 3.1.9 (not GW006 board)
         shell: bash
