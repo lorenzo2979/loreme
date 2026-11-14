@@ -105,6 +105,12 @@ jobs:
           git apply --check patches/gw006_boot_storage_host_tests.patch
           git apply patches/gw006_boot_storage_runtime.patch
           git apply patches/gw006_boot_storage_host_tests.patch
+          # The GW018 reference has an independent boot adapter which is
+          # NOT a member of the pinned GW006 product. Relocate it in this
+          # ephemeral CI checkout BEFORE the first post-patch source lock.
+          if test -f firmware/sdk/gwir_gw018_ir_boot.c; then
+            mv firmware/sdk/gwir_gw018_ir_boot.c "$RUNNER_TEMP/gwir_gw018_ir_boot.reference.c"
+          fi
           # The 43rd native module is a board-backed identity provider.
           # Re-lock the source and native map gates against the expanded
           # reviewed source tree; never skip or weaken their checks.
