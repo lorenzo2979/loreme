@@ -106,6 +106,26 @@ def audit(layout: dict) -> dict:
         "warning": "Il risultato non autorizza scritture fisiche o flashing. Restano da provare bootloader, OTA, driver e recupero."
     }
 
+def require_erased_candidate(backup: Path, offset: int, size: int) -> None:
+    """Reject an IR storage area that would overwrite existing chip contents.
+
+    This is only a *necessary* condition, never proof that a bootloader,
+    OTA updater, FTL or wear-leveling service does not own the empty sectors.
+    Do not infer authorization even from an all-0xFF candidate.
+    """
+    with backup.open("rb") as handle:
+        handle.seek(offset)
+        for pos in range(offset, offset + size, SECTOR):
+            block = handle.read(SECTOR)
+            if len(block) != SECTOR:
+                raise AuditError("Lettura backup incompleta durante audit settori")
+            if any(byte != 0xFF for byte in block):
+                raise AuditError(
+                    f"Partizione IR NON LIBERA: dati già presenti nel settore 0x{pos:06X}; "
+                    "non cancellare firmware, OTA o dati esistenti"
+                )
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("layout", type=Path, help="JSON con partizioni documentate della vera GW006")
@@ -132,6 +152,11 @@ def main() -> int:
         if layout.get("backup_sha256", "").lower() != h.hexdigest():
             raise AuditError("SHA256 del backup diverso da quello dichiarato")
         report = audit(layout)
+        # A hash match and a plausible declared map are NOT enough:
+        # reject any currently programmed 4KiB sector in the candidate.
+        require_erased_candidate(
+            args.backup, report["candidate_offset"], report["candidate_size"]
+        )
     except (OSError, json.JSONDecodeError, AuditError) as exc:
         print(json.dumps({"result": "BLOCKED", "reason": str(exc)}, ensure_ascii=False, indent=2))
         return 2
