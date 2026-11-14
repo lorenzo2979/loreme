@@ -12,7 +12,11 @@
 #include "../realtek/gwir_amebad_rx_irq.h"
 #include <stdint.h>
 
-static gwir_engine ir_engine;                 /* ~50KiB, never on task stack */
+/* GW018-DM/WBRG1 exposes 4 MiB PSRAM. Reserve the 5x2048-pulse engine
+ * in the vendor's dedicated .psram.bss section, NOT scarce internal SRAM.
+ * Keep all 2048 durations, all five capture frames and TX scratch intact.
+ * This placement is still untested on the user's physical GW006. */
+static gwir_engine ir_engine __attribute__((section(".psram.bss")));
 static gwir_amebad_bus ir_bus;               /* ~8KiB */
 static gwir_amebad_rx_queue ir_irq_queue;    /* ~4KiB */
 static gwir_amebad_rx_worker ir_worker;      /* ~8KiB */
