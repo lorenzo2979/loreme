@@ -10,6 +10,8 @@ on:
       - 'tests/stubs/gwir_ir_board_test_shim.h'
       - 'tests/test_vendor_ir_board.c'
       - 'firmware/sdk/gwir_sdk_diag.c'
+      - 'scripts/verify_gw006_product_link.py'
+      - 'tests/test_gw006_product_link.py'
       - 'firmware/sdk/gwir_sdk_apconfig_port.c'
       - 'firmware/sdk/gwir_sdk_apconfig_port.h'
       - 'firmware/sdk/gwir_sdk_provisioned_identity.c'
@@ -302,7 +304,10 @@ jobs:
           python3 tests/test_source_manifest.py
           python3 tests/test_native_km4_objects.py
           python3 tests/test_native_km4_link_map.py
-          echo 'GW006_43_SOURCE_AND_CREDENTIAL_TESTS_PASS=1; NO HARDWARE'
+          # All 46 objects remain source-locked, while 3 obsolete services
+          # must be ABSENT from the firmware (including legacy plaintext).
+          python3 tests/test_gw006_product_link.py
+          echo 'GW006_46_SOURCE_AND_CREDENTIAL_TESTS_PASS=1; NO HARDWARE'
       - name: Preserve exact audited source tree for offline code review (NO FLASH)
         uses: actions/upload-artifact@v4
         with:
@@ -428,7 +433,7 @@ jobs:
           # A failed final-link audit MUST fail the job; preserve diagnostics
           # and map/ELF artifact for inspection even when link gate rejects.
           set +e
-          python3 scripts/verify_native_km4_link_map.py --sdk "$sdk" \
+          python3 scripts/verify_gw006_product_link.py --sdk "$sdk" \
              --build-start-file "$RUNNER_TEMP/gwir_native_started" \
              --output native-link-inspection/FINAL_LINK_REPORT.json \
              > native-link-inspection/FINAL_LINK_LOG.txt 2>&1
@@ -439,11 +444,11 @@ jobs:
           cp "$image/target_img2.axf" native-link-inspection/
           (cd native-link-inspection && sha256sum text_image2_ns.map target_img2.axf > SHA256SUMS.txt)
           if [ "$gate_status" -ne 0 ]; then
-            echo "GW006_FINAL_LINK_GATE=FAIL (not an installable firmware)" | tee native-link-inspection/FINAL_LINK_STATUS.txt
+            echo "GW006_PRODUCT_LINK_GATE=FAIL (not an installable firmware)" | tee native-link-inspection/FINAL_LINK_STATUS.txt
             cat native-link-inspection/FINAL_LINK_LOG.txt
             exit "$gate_status"
           fi
-          echo 'GW006_FINAL_LINK_GATE=PASS (does not certify hardware)' | tee native-link-inspection/FINAL_LINK_STATUS.txt
+          echo 'GW006_PRODUCT_LINK_GATE=PASS (does not certify hardware)' | tee native-link-inspection/FINAL_LINK_STATUS.txt
       - name: Upload Realtek final-link inspection (DO NOT INSTALL)
         if: always()
         uses: actions/upload-artifact@v4
