@@ -10,6 +10,8 @@ on:
       - 'tests/stubs/gwir_ir_board_test_shim.h'
       - 'tests/test_vendor_ir_board.c'
       - 'firmware/sdk/gwir_sdk_diag.c'
+      - 'firmware/sdk/gwir_sdk_apconfig_port.c'
+      - 'firmware/sdk/gwir_sdk_apconfig_port.h'
       - 'firmware/sdk/gwir_sdk_provisioned_identity.c'
       - 'firmware/sdk/gwir_sdk_provisioned_identity.h'
       - 'tests/test_sdk_provisioned_identity.c'
@@ -235,6 +237,13 @@ jobs:
           fi
           # Restore branch-reviewed board hook after pinned archive extraction.
           git show HEAD:firmware/sdk/gwir_sdk_diag.c > firmware/sdk/gwir_sdk_diag.c
+          # The locked source predates the physical controller. Restore the
+          # reviewed board-approval-only FreeRTOS commissioning path, then
+          # hash all 46 modules before ARM compilation.
+          git show HEAD:firmware/sdk/gwir_sdk_apconfig_port.c > firmware/sdk/gwir_sdk_apconfig_port.c
+          git show HEAD:firmware/sdk/gwir_sdk_apconfig_port.h > firmware/sdk/gwir_sdk_apconfig_port.h
+          grep -F 'gwir_sdk_apconfig_commission(' firmware/sdk/gwir_sdk_diag.c
+          grep -F 'gwir_apconfig_controller_poll(' firmware/sdk/gwir_sdk_apconfig_port.c
           # Override only the audited single-owner browser adapter; never
           # replace/restore any secret or board flash map from a public dump.
           git show HEAD:firmware/realtek/gwir_amebad_auth_server.c > firmware/realtek/gwir_amebad_auth_server.c
