@@ -13,6 +13,7 @@
 #include <WiFi.h>
 #include <IRDevice.h>
 #include <FlashMemory.h>
+#include "src/gw006_ameba_authenticated_tcp.h"
 extern "C" {
 #include "src/gwir_engine.h" // actual shared C engine compiled under src/
 #include "src/gwir_runtime_owner.h" // signed GWAS, persistent 96-button NOR journal
@@ -47,6 +48,7 @@ void gw006_amebad_link_only_probe(void) {
  * connected. Use a static object: the five-frame IR queue is too large
  * for the limited FreeRTOS task stack. */
 static gwir_engine s_gwir_engine;
+static Gw006AmebaAuthenticatedTcp s_signed_tcp;
 static bool gw006_core_selftest(void) {
     uint8_t request[GWIR_HEADER_SIZE], response[GWIR_HEADER_SIZE];
     size_t request_len = 0u, response_len = 0u;
@@ -87,5 +89,8 @@ void setup() {
                    : "GW006 AUTH/JOURNAL SOURCE CONTRACT TEST FAILED");
 }
 void loop() {
-    delay(1000);
+    /* No listener until a trusted board port provisions key + fresh nonce,
+     * an exclusive flash journal, physical IR and station Wi-Fi. */
+    s_signed_tcp.poll();
+    delay(2);
 }
