@@ -18,6 +18,7 @@
 extern "C" {
 #include "src/gwir_engine.h" // actual shared C engine compiled under src/
 #include "src/gwir_runtime_owner.h" // signed GWAS, persistent 96-button NOR journal
+#include "src/gwir_wbrg1_flash_port.h" // bounded 8MiB NOR adapter (inactive until approved)
 }
 
 static constexpr unsigned int kTVButtons = 36u;
@@ -74,6 +75,8 @@ static bool gw006_store_auth_contracts_selftest() {
     uint32_t bytes = gwir_fj_worst_case_rewrite_bytes();
     if (bytes < 4000000u || bytes > 8000000u) return false;
     if (gwir_fj_open(NULL, NULL) != -1) return false;
+    if (gwir_wbrg1_flash_port_attach(NULL) != -1) return false;
+    /* Flash attach(NULL) must reject prior to JEDEC read; NO I/O issued. */
     if (gwir_saved_play_init(NULL, NULL, NULL, NULL, 0u) != -1) return false;
     if (gwir_auth_init(NULL, NULL, NULL, NULL, NULL) != GWIR_AUTH_REJECT)
         return false;
