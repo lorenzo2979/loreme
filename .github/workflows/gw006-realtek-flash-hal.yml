@@ -101,6 +101,9 @@ jobs:
           git apply --check patches/gw006_authenticated_store_implementation.patch
           git apply patches/gw006_authenticated_storage_protocol.patch
           git apply patches/gw006_authenticated_store_implementation.patch
+          # Abort a partially staged upload without erasing previously committed IR.
+          git apply --check patches/gw006_authenticated_storage_abort.patch
+          git apply patches/gw006_authenticated_storage_abort.patch
           # Object path patch validated with git apply --check against SDK release.
           git apply --check patches/gw006_native_real_object_dir.patch
           git apply patches/gw006_native_real_object_dir.patch
