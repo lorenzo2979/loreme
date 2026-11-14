@@ -9,6 +9,11 @@ on:
       - 'firmware/realtek/gwir_amebad_vendor_bus.h'
       - 'tests/stubs/gwir_ir_board_test_shim.h'
       - 'tests/test_vendor_ir_board.c'
+      - 'firmware/sdk/gwir_sdk_diag.c'
+      - 'firmware/sdk/gwir_sdk_provisioned_identity.c'
+      - 'firmware/sdk/gwir_sdk_provisioned_identity.h'
+      - 'tests/test_sdk_provisioned_identity.c'
+      - 'tests/test_gw006_product_boot.c'
   workflow_dispatch:
 permissions:
   contents: read
@@ -92,6 +97,48 @@ jobs:
           git apply --check patches/gw006_boot_storage_host_tests.patch
           git apply patches/gw006_boot_storage_runtime.patch
           git apply patches/gw006_boot_storage_host_tests.patch
+          # The 43rd native module is a board-backed identity provider.
+          # Re-lock the source and native map gates against the expanded
+          # reviewed source tree; never skip or weaken their checks.
+          python3 - <<'PY'
+          from pathlib import Path
+          substitutions={
+            "scripts/integrate_amebad_sdk.py":[
+                ('"gwir_sdk_bootstrap.c"]','"gwir_sdk_bootstrap.c", "gwir_sdk_provisioned_identity.c"]')],
+            "scripts/verify_native_km4_objects.py":[
+                ('c_count != 42','c_count != 43'),
+                ('expected exact 42','expected exact 43')],
+            "scripts/verify_native_km4_link_map.py":[
+                ("count != 42 or objs['native_objects_verified'] != 42",
+                 "count != 43 or objs['native_objects_verified'] != 43"),
+                ('exactly 42 validated','exactly 43 validated')],
+            "tests/test_source_manifest.py":[
+                ('== 42','== 43'),('42 C sources','43 C sources')],
+            "tests/test_native_km4_objects.py":[('== 42','== 43')],
+            "tests/test_native_km4_link_map.py":[
+                ('len(srcs) == 42','len(srcs) == 43'),
+                ("['modules_with_allocated_sections'] == 42",
+                 "['modules_with_allocated_sections'] == 43"),
+                ('len(actual) == 42','len(actual) == 43'),
+                ("{'native_objects_verified': 42}",
+                 "{'native_objects_verified': 43}"),
+                ('return_value=42','return_value=43'),
+                ("['expected_modules'] == 42","['expected_modules'] == 43"),
+                ("['loaded_modules'] == 42","['loaded_modules'] == 43"),
+                ("['loaded_but_unallocated']) == 23","['loaded_but_unallocated']) == 24"),
+                ('42-object','43-object'),
+                ('42 loads / 19 linked / 23 excluded',
+                 '43 loads / 19 linked / 24 excluded')]
+          }
+          for name, replacements in substitutions.items():
+              path=Path(name)
+              txt=path.read_text()
+              for old,new in replacements:
+                  if old not in txt: raise SystemExit(f'Unexpected source: {name} lacks {old}')
+                  txt=txt.replace(old,new)
+              path.write_text(txt)
+          print('43-source SDK and ELF audit updated, old release attested independently')
+          PY
           # Maintain a *post-patch* source hash list for compiled object gates.
           # The original release ZIP has already passed its independent SHA
           # and immutable manifest verification above.
@@ -148,6 +195,35 @@ jobs:
           path.write_text(json.dumps(d,indent=2)+'\n')
           PY
           python3 scripts/verify_release_sources.py
+      - name: Host-test unique persistent HMAC nonce and complete-product boot gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -Ifirmware/sdk -Ifirmware/core \
+            firmware/sdk/gwir_sdk_provisioned_identity.c \
+            tests/test_sdk_provisioned_identity.c \
+            -o build/test_sdk_provisioned_identity
+          ./build/test_sdk_provisioned_identity
+          cc -std=c11 -O1 -g -Wall -Wextra -Werror -pedantic \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -Ifirmware/sdk -Ifirmware/core \
+            firmware/sdk/gwir_sdk_provisioned_identity.c \
+            tests/test_sdk_provisioned_identity.c \
+            -o build/test_sdk_provisioned_identity_asan
+          ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+            ./build/test_sdk_provisioned_identity_asan
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -ffunction-sections -fdata-sections '-DDBG_8195A(...)=' \
+            -Itests/stubs -Ifirmware/sdk -Ifirmware/core -Ifirmware/realtek \
+            firmware/sdk/gwir_sdk_diag.c tests/test_gw006_product_boot.c \
+            -Wl,--gc-sections -o build/test_gw006_product_boot
+          ./build/test_gw006_product_boot
+          python3 tests/test_source_manifest.py
+          python3 tests/test_native_km4_objects.py
+          python3 tests/test_native_km4_link_map.py
+          echo 'GW006_43_SOURCE_AND_CREDENTIAL_TESTS_PASS=1; NO HARDWARE'
       - name: Preserve exact audited source tree for offline code review (NO FLASH)
         uses: actions/upload-artifact@v4
         with:
@@ -183,6 +259,7 @@ jobs:
           sdk="$RUNNER_TEMP/ameba-rtos-d"
           python3 scripts/integrate_amebad_sdk.py --sdk "$sdk" --dry-run
           python3 scripts/integrate_amebad_sdk.py --sdk "$sdk" --apply
+          grep -F 'gwir_sdk_provisioned_identity.c' "$sdk/project/realtek_amebaD_va0_example/src/src_hp/Makefile"
           # Call the real board registration point BEFORE secure boot scheduling.
           # With no audited board-specific provider, the weak hook returns
           # failure and the service stays disabled. Never fabricate a secret.
