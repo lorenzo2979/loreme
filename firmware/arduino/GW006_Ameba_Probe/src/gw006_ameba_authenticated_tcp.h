@@ -5,6 +5,7 @@
 #include <WiFi.h>
 extern "C" {
 #include "gwir_runtime_owner.h"
+#include "gwir_ir_pipeline.h"
 }
 
 /* AmebaD Arduino TCP adaptor around the ACTUAL GWAS HMAC authenticated
@@ -16,12 +17,13 @@ extern "C" {
 class Gw006AmebaAuthenticatedTcp {
 public:
     Gw006AmebaAuthenticatedTcp();
-    bool begin(gwir_runtime_owner *owner);
+    bool begin(gwir_runtime_owner *owner, gwir_ir_pipeline *pipeline);
     void poll();
     void end();
 private:
     WiFiServer server_;
     gwir_runtime_owner *owner_;
+    gwir_ir_pipeline *pipeline_;
     bool active_;
 };
 #endif
