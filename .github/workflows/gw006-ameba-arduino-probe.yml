@@ -26,7 +26,10 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           root = Path('firmware/arduino/GW006_Ameba_Probe/src')
-          assert len(list(root.glob('gwir_*.c'))) == 10
+          assert len(list(root.glob('gwir_*.c'))) == 21
+          assert (root/'gwir_ir_pipeline.c').is_file()
+          assert (root/'gwir_amebad_rx_irq.c').is_file()
+          assert (root/'gwir_amebad_vendor_bus.c').is_file()
           assert (root/'gwir_wbrg1_flash_port.c').is_file()
           assert 'GWIR_STORE_ABORT = 15' in (root/'gwir_protocol.h').read_text()
           assert 'case GWIR_STORE_ABORT:' in (root/'gwir_saved_play_command.c').read_text()
