@@ -1,12 +1,13 @@
-name: GW006 IMAGE BUILD - native KM0 KM4 boot reachability (NO FLASH)
+name: GW006 IR Universal - native images with reclaimable IR storage (NO FLASH)
 
 on:
   push:
-    branches: [review/gw006-image-artifacts]
+    branches: [review/gw006-ir-storage-native-image]
     paths:
       - '.github/workflows/gw006-native-image-build.yml'
       - '.github/workflows/gw006-cp38-native.yml'
       - 'source_bundles/GW006_CP38_SOURCE_DELTA_NO_FLASH.zip'
+      - 'source_bundles/GW006_STORAGE_FIX_SOURCE_DELTA_NO_FLASH.zip'
       - 'source_bundles/GW006_CP32_SOURCE_ONLY_NO_FLASH.zip'
       - 'source_bundles/GW006_CP35_SOURCE_DELTA_NO_FLASH.zip'
       - 'source_bundles/GW006_CP36_DIAGNOSTICS_DELTA_NO_FLASH.zip'
@@ -121,6 +122,24 @@ jobs:
               if len(found)!=23 or not {'firmware/realtek/gwir_ir_pipeline.c',
                       'firmware/realtek/gwir_ir_pipeline.h', 'tests/test_ir_pipeline.c'}.issubset(found):
                   raise SystemExit('Unexpected CP38 overlay set')
+              z.extractall('.')
+          PY
+          # Exactly four vetted files: real power-safe NOR reclamation, host
+          # test coverage and a refreshed immutable source-lock manifest.
+          echo 'eec5ac959b228be490c1a23985a0849da8a46b55249b9f82b3bb2174ec6a0a35  source_bundles/GW006_STORAGE_FIX_SOURCE_DELTA_NO_FLASH.zip' | sha256sum -c -
+          python3 - <<'PY'
+          from pathlib import PurePosixPath
+          import stat,zipfile
+          allowed={'firmware/core/gwir_flash_journal.c','firmware/core/gwir_flash_journal.h',
+                   'tests/test_flash_journal.c','docs/CP21_SOURCE_MANIFEST.json'}
+          with zipfile.ZipFile('source_bundles/GW006_STORAGE_FIX_SOURCE_DELTA_NO_FLASH.zip') as z:
+              members=z.infolist()
+              if len(members)!=4 or {m.filename for m in members}!=allowed:
+                  raise SystemExit('Unapproved storage source overlay')
+              for m in members:
+                  p=PurePosixPath(m.filename)
+                  if m.is_dir() or p.is_absolute() or '..' in p.parts or stat.S_ISLNK(m.external_attr>>16):
+                      raise SystemExit('Unsafe storage source overlay member')
               z.extractall('.')
           PY
           mkdir -p native_logs
@@ -260,7 +279,7 @@ jobs:
           destination.mkdir(exist_ok=True)
           expected=["km0_boot_all.bin","km4_boot_all.bin","km0_km4_image2.bin"]
           report={"source":"AmebaD official SDK pinned SHA 7569200fb8304daa61a9f09ccf439ada38d6de2e",
-                  "firmware":"GW006 IR Universal experimental CP38 source",
+                  "firmware":"GW006 IR Universal experimental CP38 + NOR reclaim source",
                   "target":"Realtek AmebaD SDK example; NOT verified against GW006 board flash layout",
                   "installable":False,"flashed":False,"files":[]}
           for name in expected:
@@ -276,10 +295,15 @@ jobs:
                   raise SystemExit(f"Unreasonable native image size for {name}: {len(data)}")
               (destination/name).write_bytes(data)
               report["files"].append({"name":name,"size_bytes":len(data),"sha256":hashlib.sha256(data).hexdigest(),"vendor_path":str(p.relative_to(root))})
-          axfs=list(root.rglob("target_img2.axf"))
-          report["application_elf_count"]=len(axfs)
-          if len(axfs)!=1: raise SystemExit("Expected one final KM4 application ELF: "+str(axfs))
-          report["application_elf_sha256"]=hashlib.sha256(axfs[0].read_bytes()).hexdigest()
+          # The official dual-core SDK produces TWO distinct target_img2.axf
+          # files. The KM4 application ELF lives under project_hp, KM0 under lp.
+          hp_elf=root/"project_hp/asdk/image/target_img2.axf"
+          lp_elf=root/"project_lp/asdk/image/target_img2.axf"
+          if not hp_elf.is_file() or not lp_elf.is_file():
+              raise SystemExit("Vendor did not produce both KM4/KM0 ELFs")
+          report["application_elf_count"]=2
+          report["km4_application_elf_sha256"]=hashlib.sha256(hp_elf.read_bytes()).hexdigest()
+          report["km0_application_elf_sha256"]=hashlib.sha256(lp_elf.read_bytes()).hexdigest()
           (destination/"IMAGE_MANIFEST.json").write_text(json.dumps(report,indent=2)+"\n")
           (destination/"DO_NOT_FLASH.txt").write_text(
             "EXPERIMENTAL SDK BUILD: DO NOT FLASH TO THE GW006.\n"
