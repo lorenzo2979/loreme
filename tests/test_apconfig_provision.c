@@ -14,19 +14,29 @@ static void reset(void) {stages=verifications=commits=rollbacks=0;fail_stage=fai
 static void test_parse(void) {
     gwir_provision_profile p;
     const char *s="ssid=My+Router&password=12345678";
-    assert(gwir_provision_parse_form((const uint8_t *)s,strlen(s),&p)==0);
+    assert(gwir_provision_parse_form_secure((const uint8_t *)s,strlen(s),&p,1)==0);
     assert(strcmp(p.ssid,"My Router")==0 && strcmp(p.password,"12345678")==0 && !p.is_open);
+    /* A password must NEVER enter from the no-password AP over HTTP. */
+    memset(&p,0x51,sizeof(p));
+    assert(gwir_provision_parse_form((const uint8_t *)s,strlen(s),&p)!=0);
+    for(size_t j=0;j<sizeof(p);++j) assert(((uint8_t*)&p)[j]==0);
+    /* URL encoding cannot hide a password from the untrusted-channel gate. */
+    const char *escaped="ssid=Home&password=%31%32%33%34%35%36%37%38";
+    assert(gwir_provision_parse_form((const uint8_t*)escaped,strlen(escaped),&p)!=0);
+    for(size_t j=0;j<sizeof(p);++j) assert(((uint8_t*)&p)[j]==0);
+    assert(gwir_provision_parse_form_secure((const uint8_t*)escaped,strlen(escaped),&p,1)==0);
+    assert(strcmp(p.password,"12345678")==0);
     s="password=&ssid=Cafe%20Wifi";
     assert(gwir_provision_parse_form((const uint8_t *)s,strlen(s),&p)==0);
     assert(strcmp(p.ssid,"Cafe Wifi")==0 && p.is_open);
     s="ssid=X&password=x%2Btest%21ok";
-    assert(gwir_provision_parse_form((const uint8_t *)s,strlen(s),&p)==0);
+    assert(gwir_provision_parse_form_secure((const uint8_t *)s,strlen(s),&p,1)==0);
     assert(strcmp(p.password,"x+test!ok")==0);
     /* Full APConfig profile: preserve home Wi-Fi password, static STA
      * routing, and require an independently verified channel for DDNS token. */
     s="ssid=My+Router&password=12345678&ip_mode=static&ip=192.168.1.87"
       "&mask=255.255.255.0&gateway=192.168.1.1&dns1=1.1.1.1&dns2=8.8.8.8";
-    assert(gwir_provision_parse_form((const uint8_t *)s,strlen(s),&p)==0);
+    assert(gwir_provision_parse_form_secure((const uint8_t *)s,strlen(s),&p,1)==0);
     assert(p.use_dhcp==0 && !p.duckdns_enabled);
     assert(strcmp(p.ipv4,"192.168.1.87")==0);
     assert(strcmp(p.dns2,"8.8.8.8")==0);
@@ -82,7 +92,7 @@ static void test_apply(void) {
     gwir_provision_profile p;
     gwir_provision_ops ops={0,stage,verify,commit,rollback};
     const char *s="ssid=My+Router&password=12345678";
-    assert(gwir_provision_parse_form((const uint8_t *)s,strlen(s),&p)==0);
+    assert(gwir_provision_parse_form_secure((const uint8_t *)s,strlen(s),&p,1)==0);
     reset();assert(gwir_provision_apply(&p,&ops)==0);
     assert(stages==1 && verifications==1 && commits==1 && rollbacks==0);
     reset();fail_stage=1;assert(gwir_provision_apply(&p,&ops)==-3);
@@ -92,6 +102,12 @@ static void test_apply(void) {
     reset();fail_commit=1;assert(gwir_provision_apply(&p,&ops)==-5);
     assert(stages==1 && verifications==1 && commits==1 && rollbacks==1);
     assert(gwir_provision_apply(&p,NULL)==-1);
+    /* A malformed direct caller cannot skip the transport-security gate. */
+    reset();
+    p.secure_transport_verified=0;
+    assert(gwir_provision_apply(&p,&ops)==-2 && stages==0 &&
+           verifications==0 && commits==0 && rollbacks==0);
+    p.secure_transport_verified=1;
     /* Direct API call with malformed non-terminated fields must fail before
      * any attempt to parse IPv4 or invoke the credential backend. */
     reset();
