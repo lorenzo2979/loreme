@@ -150,17 +150,15 @@ jobs:
                   if old not in txt: raise SystemExit(f'Unexpected source: {name} lacks {old}')
                   txt=txt.replace(old,new)
               path.write_text(txt)
-          # Add the two reviewed web modules to the actual vendor KM4 source list.
-          # They are linked only if the authenticated owner task calls them;
-          # the final ELF gate below is NOT weakened.
+          # The lock gate AST reads the literal GROUPS mapping. Extend the
+          # actual core list, not a late dynamic append which it cannot audit.
           source=Path('scripts/integrate_amebad_sdk.py')
           code=source.read_text()
-          anchor='def require_sdk('
-          if code.count(anchor)!=1 or 'GROUPS["core"].extend(' in code:
+          anchor='"gwir_runtime_owner.c"]'
+          replacement='"gwir_runtime_owner.c", "gwir_web_rpc.c", "gwir_web_http_post.c"]'
+          if code.count(anchor)!=1 or replacement in code:
               raise SystemExit('Unexpected SDK integrator source')
-          code=code.replace(anchor,
-              'GROUPS["core"].extend(["gwir_web_rpc.c", "gwir_web_http_post.c"])\n\n'+anchor,1)
-          source.write_text(code)
+          source.write_text(code.replace(anchor,replacement,1))
           print('45-source SDK and ELF audit updated, original release attested independently')
           PY
           # The reviewed real-object-dir change moved synthetic object
@@ -217,6 +215,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # GW018 native reference boot adapter is deliberately excluded
+          # from the real GW006 SDK product inventory, not silently linked.
+          if test -f firmware/sdk/gwir_gw018_ir_boot.c; then
+            mv firmware/sdk/gwir_gw018_ir_boot.c "$RUNNER_TEMP/gwir_gw018_ir_boot.reference.c"
+          fi
           # Restore branch-reviewed board hook after pinned archive extraction.
           git show HEAD:firmware/sdk/gwir_sdk_diag.c > firmware/sdk/gwir_sdk_diag.c
           # Override only the audited single-owner browser adapter; never
