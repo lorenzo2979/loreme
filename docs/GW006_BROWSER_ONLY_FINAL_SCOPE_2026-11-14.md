@@ -10,6 +10,11 @@ Decisione confermata dall'utente: la GW006 deve funzionare autonomamente con int
 - Memoria permanente dopo perdita di alimentazione; capacità calcolata con dati caso peggiore e margine.
 - Wi-Fi configurabile (prima connessione AP, poi STA) e accesso locale autenticato.
 - **APConfig resta attivabile dal pulsante fisico della GW006**, usando il comportamento previsto dal progetto: il pulsante di configurazione non viene eliminato o sostituito dall'interfaccia web. L'accesso e il salvataggio delle credenziali devono rimanere protetti.
+- **APConfig include obbligatoriamente**: pulsante **Scansione Wi-Fi** (elenco SSID, potenza segnale, protezione, scelta rete e SSID manuale), password Wi-Fi, selezione **DHCP / IP statico** e configurazione **DuckDNS**.
+- **IP statico per la modalità STA**: indirizzo IPv4, maschera, gateway, DNS primario e DNS secondario facoltativo, con validazione e ritorno automatico al profilo precedente se la connessione fallisce. DHCP predefinito; l'indirizzo dell'AP provvisorio non cambia per questa scelta.
+- **DuckDNS in APConfig**: attivazione/disattivazione, sottodominio/hostname, token personale, pulsante di verifica e stato dell'ultimo aggiornamento; successivo aggiornamento automatico quando la GW006 è connessa a Internet, con retry limitati. Il token è segreto: non mostrarlo dopo il salvataggio, non inserirlo nei log o nelle risposte web e non trasmetterlo su AP aperto/HTTP non cifrato; usare un canale di provisioning protetto per le credenziali DuckDNS.
+- Anche le stesse impostazioni di rete e DuckDNS devono restare modificabili dalla dashboard web **autenticata** dopo la prima configurazione. Nessuna funzione richiede un'app Android.
+
 - Quattro telecomandi grafici responsivi, status codici salvati, funzioni di configurazione e diagnostica.
 - Rifiutare credenziali di fabbrica condivise, autenticazione assente, contatori anti-replay resettati senza protezione.
 - Non usare una partizione Flash da un dump WBRG1 di altri prodotti come se fosse certamente libera sulla GW006.
@@ -33,6 +38,7 @@ Decisione confermata dall'utente: la GW006 deve funzionare autonomamente con int
 
 ## Blocchi aperti, non mascherare
 - Binding avvio reale con credenziali e Wi-Fi/AP/dashboard.
+- Scansione reti Wi-Fi, applicazione DHCP/IP statico, portale APConfig comandato dal pulsante, integrazione DuckDNS e protezione del token: implementazione e prove su hardware ancora da completare.
 - Chiave per dispositivo e nonce persistente: driver già sviluppato, fornitore sicuro board-specific non integrato.
 - Partizione Flash realmente assegnabile e sua capienza: non verificata; scritture intenzionalmente disabilitate.
 - Pinmux IR predisposto ma da autorizzare/testare sulla scheda.
