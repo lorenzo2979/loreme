@@ -1,4 +1,4 @@
-name: GW006 Realtek Ameba Arduino compile probe (NOT GW006 firmware)
+name: GW006 Ameba Arduino integrated auth-IR-NOR build (BOARD NOT VERIFIED)
 on:
   push:
     branches: [review/gw006-realtek-flash-hal]
@@ -55,6 +55,42 @@ jobs:
           grep -q 'gw006_amebad_link_only_probe' \
             firmware/arduino/GW006_Ameba_Probe/GW006_Ameba_Probe.ino
           echo 'AMEBAD_ARDUINO_FAMILY_COMPILE=PASS; WBRG1_BOARD_SUPPORT=NOT_VERIFIED; NO_FLASH'
+      - name: Verify real ELF contains signed auth, persisted storage, IR, and PSRAM engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          elf="build/gw006-ameba-arduino/application.axf"
+          test -s "$elf"
+          nm="$HOME/.arduino15/packages/realtek/tools/ameba_d_asdk_toolchain/1.0.1/bin/arm-none-eabi-nm"
+          "$nm" --defined-only -C "$elf" > build/gw006-ameba-arduino/linked-symbols.txt
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          data=Path('build/gw006-ameba-arduino/linked-symbols.txt').read_text()
+          required=[
+            'gwir_engine_process','gwir_fj_put','gwir_saved_play_command',
+            'gwir_auth_dispatch_routed','gwir_runtime_owner_feed',
+            'gw006_ameba_hmac_sha256','Gw006AmebaAuthenticatedTcp::poll()',
+          ]
+          missing=[n for n in required if n not in data]
+          if missing: raise SystemExit('Missing real linked firmware functions: '+', '.join(missing))
+          m=re.search(r'^([0-9a-fA-F]+)\\s+\\w\\s+s_gwir_engine
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw006-amebad-arduino-awcu488-diagnostic-only
+          path: |
+            build/gw006-ameba-arduino/build.log
+            build/gw006-ameba-arduino/linked-symbols.txt
+          if-no-files-found: warn
+          retention-days: 7
+,data,re.M)
+          if not m: raise SystemExit('No actual global IR engine symbol in ELF')
+          address=int(m.group(1),16)
+          if not 0x02000000 <= address < 0x02400000:
+            raise SystemExit(f'IR engine not in PSRAM: 0x{address:x}')
+          print(f'GW006_ARDUINO_LINKED_AUTH_IR_NOR_HMAC=PASS, ENGINE_IN_PSRAM=0x{address:08x}')
+          PY
       - name: Preserve build diagnostics only
         if: always()
         uses: actions/upload-artifact@v4
