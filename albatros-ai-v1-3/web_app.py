@@ -179,6 +179,10 @@ class Handler(BaseHTTPRequestHandler):
                          """<button>Accedi</button></form></main></html>""").encode()
                 return self._reply(200, login, "text/html; charset=utf-8")
             return self._reply(200, UI, "text/html; charset=utf-8")
+        if self.path in ("/static/style.css", "/static/app.js"):
+            filename = "style.css" if self.path.endswith(".css") else "app.js"
+            mime = "text/css; charset=utf-8" if filename.endswith(".css") else "application/javascript; charset=utf-8"
+            return self._reply(200, (ROOT / "web" / filename).read_bytes(), mime)
         if self.path == "/api/state":
             if not self._authenticated():
                 return self._reply(401, {"error": "Accesso necessario"})
