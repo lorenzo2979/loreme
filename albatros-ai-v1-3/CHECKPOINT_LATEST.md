@@ -87,3 +87,15 @@ Questa decisione NON significa che Home Assistant o la voce siano già integrati
 - Il modulo non invia POST/PUT/DELETE e non può chiamare servizi. Redirect di rete bloccati preventivamente.
 - Ultimo commit tecnico verificato `f94144de53f1836d157aa075e72476ec466cfd46`; [GitHub Actions 45628181358](https://github.com/lorenzo2979/loreme/actions/runs/45628181358) **success**.
 - **Prossimo passo:** aggiornare Codespace con `git pull --ff-only` dopo aver verificato status, lanciare `python -m unittest discover -s tests -v` e `python ha_readonly.py`. Solo dopo valutare integrazione controllata nell'agente e lettura di una entità domestica innocua.
+
+
+## V1.5 fase 2 — integrazione Gemini/Home Assistant predisposta (25 novembre 2026)
+
+- **Decisione utente:** continuare lo sviluppo; **collaudare tutto successivamente**, evitando prove manuali continue in Codespaces.
+- In `agent.py` sono esposti due strumenti allowlist `ha_get_state` e `ha_list_states`, accessibili anche dalla chat web esistente tramite `ask()`.
+- Default `ALBATROS_HA_MODE=mock`: solo due sensori simulati, nessuna richiesta HTTP; risultati marcati `source: mock` e istruzioni Gemini di dichiarare che sono simulati.
+- Modalità `live` solo esplicitamente: variabili ambiente URL/token e `ALBATROS_HA_ENTITIES` con massimo 30 entità consentite. Letture GET per ID singolo; niente servizi di attuazione, niente inventario indiscriminato.
+- Creati test `tests/test_ha_agent.py` per default mock, strumenti negati, restrizioni di argomenti, allowlist e ciclo Gemini simulato.
+- Aggiornata documentazione `HA_V15.md`.
+- **Non dichiarare collaudata end-to-end questa fase**: il codice è sul ramo GitHub, ma l'utente ha rinviato tutte le prove manuali. Nessuna credenziale reale o modifica a Home Assistant, Alexa, LUMO, DietPi.
+- **Prossime attività di sviluppo senza prove manuali dell'utente:** rifinire limiti delle risposte, robustezza ed eventuale vista di stato nell'interfaccia, conservare memoria e credenziali fuori GitHub; collaudo integrato quando l'utente lo richiederà.
