@@ -132,3 +132,14 @@ Questa decisione NON significa che Home Assistant o la voce siano già integrati
 - Creato `tests/test_fusion.py` con verifiche su fusioni sintetiche, motori correlati, parole discordanti e opposizioni.
 - Documentati limiti e prossime migliorie in `ITALIAN_STT_QUALITY.md`: manca allineamento temporale, riascolto selettivo e misurazione con audio italiano autentico. Fusioni senza verifica acustica possono essere sbagliate.
 - **Non è stato effettuato collaudo reale di accuratezza; nessuna modifica alla pipeline Alexa/Home Assistant/LUMO.** Test manuali differiti per decisione utente. Verificare esito GitHub Actions e non confondere con qualità vocale.
+
+
+## Diagnostica microfono — Speech+ (25 novembre 2026)
+
+**Nuovo requisito utente:** l'agente supervisore deve **indicare impostazioni appropriate per il microfono** in base all'audio ricevuto, non soltanto confrontare trascrittori. Vuole indicazioni su guadagno, VAD/pre-roll, volume, tagli iniziali/finali, rumore ed eco. Le impostazioni esatte richiedono misure e conoscere il dispositivo: non inventare parametri hardware.
+
+- Aggiunto `albatros-multi-stt-v2/mic_diagnostics.py`: diagnosi offline PCM16 16kHz mono di livello dBFS, picco, RMS, clipping, durata, possibile attività ai bordi e raccomandazioni testuali. Non modifica automaticamente parametri o dispositivi.
+- Aggiunto `tests/test_mic_diagnostics.py` con segnali sintetici.
+- Integrata diagnosi in `engine_runner.py`: log dei problemi/consigli, senza trascrizioni o audio salvati. Prove manuali rimandate come da volontà utente.
+- **Limitazione:** il livello ai bordi è solo indizio di parole tagliate; non identifica con certezza VAD errato. Eco, rumore e distanza non possono essere diagnosticati con certezza dal solo RMS/peak. Per configurazioni reali serviranno campioni audio e informazioni su microfono/satellite.
+- Prima di affermare che il sistema funziona, verificare test automatici e qualità reale con campioni autorizzati. Nessuna modifica al firmware Alexa/LUMO o alla pipeline Home Assistant.
