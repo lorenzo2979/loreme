@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1220">
+  <title>ALBATROS AI V1.4</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar"><div class="logo">A</div><div><strong>ALBATROS AI</strong><small>V1.4 · Assistente personale</small></div><span class="status-dot" title="Connessione locale"></span></header>
+    <section id="messages" class="messages" aria-label="Conversazione" aria-live="polite">
+      <article class="bubble bot">Ciao! Sono ALBATROS AI. Posso aiutarti con i progetti, le attività e la memoria locale. Le azioni che modificano i dati richiedono la tua autorizzazione.</article>
+    </section>
+    <section id="approval" class="approval" hidden>
+      <strong>Autorizzazione richiesta</strong>
+      <p id="approval-detail"></p>
+      <div class="actions"><button id="deny" class="secondary">Rifiuta</button><button id="allow" class="primary">Autorizza</button></div>
+    </section>
+    <p id="progress" class="progress" role="status"></p>
+    <form id="chat-form" class="composer">
+      <label class="sr-only" for="message">Scrivi un messaggio</label>
+      <textarea id="message" rows="2" maxlength="3000" placeholder="Scrivi ad ALBATROS..." required></textarea>
+      <button id="send" type="submit" class="primary">Invia</button>
+    </form>
+    <footer>La memoria rimane nel tuo Codespace. I messaggi sono elaborati dal provider AI selezionato.</footer>
+  </main>
+</body>
+</html>
