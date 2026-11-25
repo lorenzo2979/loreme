@@ -183,3 +183,12 @@ Questa decisione NON significa che Home Assistant o la voce siano già integrati
 - Report dettagliato `albatros-multi-stt-v2/REAL_AUDIO_TEST_2026-11-25.md`.
 - Nessun modello STT o filtro installato su Home Assistant/Alexa/LUMO; nessuna prova su microfoni reali. Nessuna garanzia di affidabilità: occorrono più campioni, più ripetizioni, rumori differenti, modello italiano superiore e verifica di parole tagliate.
 - Priorità prossima: benchmark ripetuto e multi-campione e selezione automatica prudente della versione audio da trascrivere; non attivare modifiche ai dispositivi.
+
+
+## Filtro adattivo Speech+ V2 — prova reale 25 novembre 2026
+
+- Priorità ribadita: **qualità dell'audio come base dell'intero STT italiano**; proteggere fonemi, consonanti, terminazioni, parole tronche, evitando correzioni inventate.
+- Implementato `albatros-multi-stt-v2/noise_reduction_v2.py`: denoiser spettrale sperimentale con stima rumore da frame quieti, smoothing tempo/frequenza, guadagno minimo e protezione approssimata dei frame ad alta energia. Nessun invio cloud; preserva il segnale originale come candidato separato.
+- Aggiornato `real_audio_probe.py` con varianti V2 e V2+calibrazione; [GitHub Actions 45673223920](https://github.com/lorenzo2979/loreme/actions/runs/45673223920) **success**: inferenza reale faster-whisper tiny su campione italiano Nexdata e rumore sintetico 10 dB.
+- WER pulito: tutte le varianti 0.3333. WER rumoroso: originale 0.1667, calibrazione sola 0.3333, V1 solo 0.1667, V1+calibrazione **0.0000**, V2 solo **0.5000** (peggiore!), V2+calibrazione **0.0000**.
+- **Conclusione:** V2 NON supera V1 come filtro singolo. Il miglioramento combinato è incoraggiante ma su un'unica frase; non applicare V2 in produzione, né selezionare un metodo basandosi sulla verità nota del benchmark. Prossimo passo multi-campione/SNR e selezione conservativa audio originale vs filtrato, misure intelligibilità/WER/errori critici. Nessuna modifica a microfoni Alexa/Orange Pi/LUMO.
