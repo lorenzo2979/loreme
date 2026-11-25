@@ -1,0 +1,26 @@
+name: ALBATROS Speech+ real Italian audio probe
+on:
+  push:
+    branches: [albatros-ai-v1-3]
+    paths:
+      - 'albatros-multi-stt-v2/real_audio_probe.py'
+      - '.github/workflows/albatros-real-audio.yml'
+  workflow_dispatch:
+jobs:
+  clean-noisy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: albatros-multi-stt-v2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install recognizer
+        run: python -m pip install --disable-pip-version-check numpy faster-whisper
+      - name: Compare clean/noisy and calibrated audio against human reference
+        env:
+          WHISPER_MODEL: tiny
+        run: python -u real_audio_probe.py
