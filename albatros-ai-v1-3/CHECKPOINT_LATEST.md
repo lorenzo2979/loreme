@@ -76,3 +76,14 @@ Questa decisione NON significa che Home Assistant o la voce siano già integrati
 **Prossimo passo concordato:** V1.5, costruire e testare un modulo Home Assistant **sola lettura**, prima con risposte mock e senza usare credenziali reali o modificare impianti, poi prova controllata; successivamente funzioni con autorizzazione e integrazione vocale.
 
 **LUMO:** firmware acquistato in formato immagine Raspberry Pi `.img.gz`, molto grande; analisi locale futura in sola lettura, senza caricarlo su GitHub. Lo STT di LUMO è escluso dagli obiettivi; non assumere che modelli/componenti proprietari siano riutilizzabili senza verificare licenze.
+
+
+## Progresso V1.5 — 25 novembre 2026 (fase 1)
+
+- Confermato il **collaudo web reale V1.4** dal checkpoint precedente: non ripetere collegamento web.
+- Aggiunto `ha_readonly.py`: modulo isolato di sola lettura, mock di default con due sensori dimostrativi; modalità `--live` solo tramite opt-in esplicito e variabili ambiente `ALBATROS_HA_URL` / `ALBATROS_HA_TOKEN`.
+- Aggiunto `tests/test_ha_readonly.py` (otto test unitari: assenza rete mock, autenticazione, GET, filtraggio attributi, input, redirect); documentazione `HA_V15.md`.
+- Il modulo **non è ancora inserito negli strumenti dell'LLM o nella web chat**; nessun collegamento reale a Home Assistant, nessuna credenziale fornita; nessun cambiamento a DietPi, Alexa o LUMO.
+- Il modulo non invia POST/PUT/DELETE e non può chiamare servizi. Redirect di rete bloccati preventivamente.
+- Ultimo commit tecnico verificato `f94144de53f1836d157aa075e72476ec466cfd46`; [GitHub Actions 45628181358](https://github.com/lorenzo2979/loreme/actions/runs/45628181358) **success**.
+- **Prossimo passo:** aggiornare Codespace con `git pull --ff-only` dopo aver verificato status, lanciare `python -m unittest discover -s tests -v` e `python ha_readonly.py`. Solo dopo valutare integrazione controllata nell'agente e lettura di una entità domestica innocua.
