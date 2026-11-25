@@ -170,3 +170,16 @@ Questa decisione NON significa che Home Assistant o la voce siano già integrati
 - Il supervisore ora richiede accordo **esatto** fra due famiglie indipendenti oppure fusione per parola con conferme sufficienti: non basta una somiglianza testuale.
 - Commit tecnico `f6281fa36b3d3ecffc09d8f54d9656354939aa7f`; [GitHub Actions 45671213037](https://github.com/lorenzo2979/loreme/actions/runs/45671213037) **success** per suite sperimentale STT.
 - Restano NON verificati accuratezza su audio reale, confronto segnale calibrato vs originale e uso su dispositivi domestici. Il DSP `audio_calibration.py` resta standalone, non attivo automaticamente sulla pipeline.
+
+
+## Primo test su audio italiano reale: pulito e rumoroso — 25 novembre 2026
+
+- L'utente ha richiesto esplicitamente di scaricare audio italiano dalla rete e testare **trascrizione pulita vs con rumore** e se l'agente pulisce davvero il segnale.
+- Fonte: campione pubblico `T0263G0002S0001.wav` + riferimento di testo, repository Nexdata-AI (file scaricato solo sul runner GitHub Actions; non redistribuire senza verificare licenza). Frase: «Durante i primi secoli dell'era cristiana».
+- Creato `real_audio_probe.py` con prova clean + rumore gaussiano 10 dB, riconoscimento `faster-whisper tiny`, confronto WER/CER e varianti elaborate.
+- Creato `noise_reduction.py`: filtro spettrale sperimentale a supporto dell'esistente `audio_calibration.py`, conserva sempre l'originale.
+- Creato workflow `.github/workflows/albatros-real-audio.yml`; [run 45672250665](https://github.com/lorenzo2979/loreme/actions/runs/45672250665) success e [run 45672533330](https://github.com/lorenzo2979/loreme/actions/runs/45672533330) success.
+- Risultato **seconda esecuzione** WER: pulito originale e varianti = 33.33%; rumoroso originale = 16.67%, sola calibrazione = 33.33%, solo denoise = 16.67%, denoise+calibrazione = **0%** (frase esatta). **Prima esecuzione** rumoroso originale e calibrato = 50% WER. Variabilità esistente tra esecuzioni, valutazione non conclusiva.
+- Report dettagliato `albatros-multi-stt-v2/REAL_AUDIO_TEST_2026-11-25.md`.
+- Nessun modello STT o filtro installato su Home Assistant/Alexa/LUMO; nessuna prova su microfoni reali. Nessuna garanzia di affidabilità: occorrono più campioni, più ripetizioni, rumori differenti, modello italiano superiore e verifica di parole tagliate.
+- Priorità prossima: benchmark ripetuto e multi-campione e selezione automatica prudente della versione audio da trascrivere; non attivare modifiche ai dispositivi.
