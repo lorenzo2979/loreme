@@ -143,3 +143,13 @@ Questa decisione NON significa che Home Assistant o la voce siano già integrati
 - Integrata diagnosi in `engine_runner.py`: log dei problemi/consigli, senza trascrizioni o audio salvati. Prove manuali rimandate come da volontà utente.
 - **Limitazione:** il livello ai bordi è solo indizio di parole tagliate; non identifica con certezza VAD errato. Eco, rumore e distanza non possono essere diagnosticati con certezza dal solo RMS/peak. Per configurazioni reali serviranno campioni audio e informazioni su microfono/satellite.
 - Prima di affermare che il sistema funziona, verificare test automatici e qualità reale con campioni autorizzati. Nessuna modifica al firmware Alexa/LUMO o alla pipeline Home Assistant.
+
+
+## Autocalibrazione microfono autonoma — 25 novembre 2026
+
+**Nuovo requisito esplicito:** ALBATROS Speech+ deve regolare direttamente e autonomamente le impostazioni del microfono, non limitarsi a dare consigli. L'utente vuole rimandare i test manuali fino a un collaudo completo.
+
+- Creato `albatros-multi-stt-v2/autocalibrate.py`: controllore offline con impostazioni simulate (gain_db, pre_roll_ms, end_silence_ms), modifiche entro limiti fissati, almeno tre registrazioni con segnali ripetuti, una sola modifica per volta, valutazione A/B con errori di trascrizione e falsi comandi critici, accettazione solo se migliora, altrimenti rollback.
+- Creato `tests/test_autocalibrate.py` con test unitari per regolazione guadagno, VAD, rollback, limiti e regresso dei comandi critici.
+- **Non ancora collegato ai veri microfoni.** Per applicare le regolazioni automatiche servono adattatori specifici per firmware/device (Alexa ESPHome, Orange Pi ecc.), lettura/scrittura dei parametri realmente supportati, snapshot e ripristino verificabile. Un'opzione astratta di gain/pre-roll non prova che l'hardware la esponga. Niente modifiche a Home Assistant, Alexa o LUMO.
+- **Nessuna ottimizzazione con parlato reale ancora misurata**; le soglie in codice sono ipotesi iniziali, da verificare prima di permettere attuazione automatica. Le operazioni di calibrazione dovranno restare isolate e con consenso iniziale esplicito per ogni dispositivo. Non promettere 100% di trascrizione corretta.
