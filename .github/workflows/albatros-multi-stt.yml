@@ -1,7 +1,7 @@
 name: ALBATROS Multi-STT experimental tests
 on:
   push:
-    branches: [albatros-multi-stt-v2-experimental]
+    branches: [albatros-multi-stt-v2-experimental, albatros-ai-v1-3]
   workflow_dispatch:
 jobs:
   judge-unit-tests:
@@ -15,6 +15,6 @@ jobs:
         with:
           python-version: "3.11"
       - name: Compile
-        run: python -m compileall -q agent.py
+        run: python -m compileall -q .
       - name: Test consensus
         run: python -m unittest discover -s tests -v
