@@ -8,7 +8,8 @@ import os
 import urllib.request
 import uuid
 import wave
-from agent import Result, judge
+from agent import Result
+from supervisor import inspect_audio, decide
 from wyoming_server import Audio, read_event, write_event
 
 LOG = logging.getLogger("albatros.engines")
@@ -122,7 +123,9 @@ def gemini(audio):
 
 async def run(audio):
     """Compare up to four transcriptions; fail closed with empty text if uncertain."""
-    if (audio.rate,audio.width,audio.channels)!=(16000,2,1):
+    quality = inspect_audio(audio)
+    if quality != "ok":
+        LOG.info("audio rejected reason=%s", quality)
         return ""
     answers=[]
     for name in ORDER:
@@ -138,14 +141,12 @@ async def run(audio):
                 text=await asyncio.wait_for(asyncio.to_thread(provider,audio),75)
             if text and len(text.strip())>=3:
                 answers.append(Result(name,text.strip()))
-                chosen=judge(answers)
-                if chosen is not None:
-                    LOG.info("accepted engine=%s corroborated_by=%d",chosen.engine,len(answers))
-                    return chosen.text
         except Exception as exc:
             LOG.warning("provider %s failed (%s)",name,type(exc).__name__)
-    LOG.info("no verified transcript, abstaining")
-    return ""
+    verdict = decide(answers)
+    LOG.info("supervisor status=%s reason=%s engines=%d",
+             verdict.status, verdict.reason, len(answers))
+    return verdict.text if verdict.status == "accepted" else ""
 
 async def main():
     from wyoming_server import serve
