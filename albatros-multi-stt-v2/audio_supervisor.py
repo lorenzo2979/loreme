@@ -11,7 +11,7 @@ import numpy as np
 from audio_filter_bank import samples, output, apply_filter, speech_segments
 from audio_fusion import aligned
 from mic_diagnostics import diagnose
-from italian_quality import tokens, critical_differences, analyze
+from italian_quality import tokens, critical_differences, analyze, edit_distance
 
 # Starting hypotheses from V2, not learned truths. Each profile can try any
 # available engine through explicit exploration/verified feedback.
@@ -103,10 +103,15 @@ class FeedbackBook:
 
     def adjustment(self,label,key):
         row=self.stats.get(label+"|"+key)
-        if not row or row["n"]<12: return 0.
+        if not row or row["n"]<10: return 0.
         # Bounded re-ranking, not automatic proof of quality.
         if row["critical"]: return -2.
         return max(-.35,min(.35,(row["wins"]-row["losses"])/row["n"]*.35+row["delta"]/row["n"]*.05))
+
+    def supported(self,label,key):
+        row=self.stats.get(label+"|"+key,{})
+        return (row.get("n",0)>=10 and row.get("wins",0)>=2 and
+                row.get("wins",0)>row.get("losses",0) and row.get("delta",0)>=2 and not row.get("critical",0))
 
     def snapshot(self):
         return {k:dict(v) for k,v in self.stats.items()}
@@ -200,8 +205,9 @@ def select(audio,recognizer,*,book=None,budget=3,explore=False,filter_fn=apply_f
             opts.append(Option(k,candidate,cache[candidate.pcm]))
         except Exception as exc:
             errors[k]=type(exc).__name__
-    # Two differently processed, nonidentical waveforms must corroborate an
-    # alternative text. This is still the same recognizer, NOT two ASR families.
+    # Filtered hypotheses from one model are correlated evidence.
+    # A strong single alternative is experimental and only eligible when
+    # the original is present, a small edit is proposed, and safeguards pass.
     valid=[o for o in opts[1:] if o.hearing.usable and tokens(o.hearing.text) and o.audio.pcm!=audio.pcm]
     groups={}
     for o in valid: groups.setdefault(tuple(tokens(o.hearing.text)),[]).append(o)
@@ -209,13 +215,26 @@ def select(audio,recognizer,*,book=None,budget=3,explore=False,filter_fn=apply_f
     original_tokens=tuple(tokens(original.hearing.text))
     for words,group in groups.items():
         if words==original_tokens: continue
-        if len({o.audio.pcm for o in group})<2: continue
-        # Never switch if a critical token differs from a nonempty baseline.
         if original_tokens and critical_differences(original.hearing.text,group[0].hearing.text): continue
         if original_tokens and abs(len(words)-len(original_tokens))>max(1,len(original_tokens)//5): continue
         best=max(group,key=lambda o:o.hearing.score)
-        if original.hearing.usable and (best.hearing.score<original.hearing.score+.12 or
-                sum(o.hearing.score for o in group)/len(group)<original.hearing.score+.05): continue
-        choices.append(best)
-    if len(choices)==1: return finish(choices[0],"corroborated_alternative")
+        distinct=len({o.audio.pcm for o in group})
+        margin=best.hearing.score-original.hearing.score
+        if distinct>=2:
+            if original.hearing.usable and (margin<.08 or
+                    sum(o.hearing.score for o in group)/len(group)<original.hearing.score+.02): continue
+            choices.append((best,"corroborated_alternative")); continue
+        if not original_tokens or not original.hearing.usable: continue
+        edits=edit_distance(original_tokens,words)["errors"]
+        if edits>max(1,len(original_tokens)//5): continue
+        supported=bool(book and book.supported(p.label,best.key))
+        # Strong acoustic/recognizer evidence; lower margin only for a
+        # profile/variant supported by separately verified training outcomes.
+        threshold=.15 if supported else .35
+        if (p.label not in ("broadband","tonal") and not supported) or margin<threshold or best.hearing.score<-.8: continue
+        # Any contradictory critical tokens in other usable hypotheses block
+        # a single-filter switch.
+        if any(critical_differences(best.hearing.text,o.hearing.text) for o in valid): continue
+        choices.append((best,"verified_policy_alternative" if supported else "strong_single_alternative"))
+    if len(choices)==1: return finish(*choices[0])
     return finish(original,"ambiguous_alternatives" if choices else "original_conservative")

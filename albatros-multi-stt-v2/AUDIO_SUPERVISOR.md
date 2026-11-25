@@ -24,3 +24,15 @@ commercial use. Artifacts include metrics and aggregate feedback, no transcripts
 No learning from unverified hypotheses, and no test references used to choose.
 Next: separate real satellite recordings, latency and Multi-STT families testing,
 explicit human feedback persistence and hardware control after permission/testing.
+
+## Revision 1.1
+First development run preserved original in 50/50 conditions (50 word errors);
+held-out parquet download exceeded 750 MB. Use dataset-viewer rows of it_it/test,
+fetch only needed audio assets with bounded individual downloads. Dataset viewer
+availability and audio assets are not yet validated. Keep DEMAND noise mixtures.
+Single-filter experimental alternative requires a small edit, no critical-token
+conflict, strong recognizer margin (.35) on tonal/broadband input or a .15 margin
+with verified profile/variant feedback. Multi-variant margin relaxed slightly.
+Feedback threshold 10 observations (not 10 independent speakers). Report
+oracle_diagnostic separately as reference-based theoretical ceiling, never as
+runtime output. New tests for weak and supported single alternatives. No deployment.

@@ -15,13 +15,12 @@ import zipfile
 import subprocess
 import numpy as np
 import requests
-import pyarrow.parquet as pq
 from audio_agent_benchmark import NAMES,CASES,load,simulate,pcm,WhisperModel
 from audio_supervisor import select,recognize,FeedbackBook
 from audio_filter_bank import samples
 from italian_quality import analyze,score_dataset
 
-FLEURS="https://huggingface.co/datasets/google/fleurs/resolve/8e74c3a7c16ffd851ceb9d50012daa64122d6734/it_it/test-00000-of-00001.parquet"
+FLEURS="https://datasets-server.huggingface.co/rows"
 DEMAND="https://zenodo.org/records/1227121/files/"
 NOISES={"kitchen":"DKITCHEN_16k.zip","street":"SPSQUARE_16k.zip"}
 
@@ -42,22 +41,30 @@ def decode_bytes(data):
     return np.frombuffer(raw,dtype="<i2").astype(np.float32)/32768
 
 def independent_corpus(folder,count):
-    path=folder/"fleurs-it-test.parquet"
-    download(FLEURS,path)
-    table=pq.ParquetFile(path)
-    clips=[]; seen=set()
-    # Fixed ordering, duplicate text excluded before seeing results.
-    for batch in table.iter_batches(batch_size=16,columns=["audio","transcription"]):
-        for row in batch.to_pylist():
+    # Request only a bounded subset of the Italian held-out test split.
+    # The dataset viewer provides signed audio links, avoiding huge parquet.
+    clips=[]; seen=set(); session=requests.Session()
+    for offset in range(0,128,32):
+        response=session.get(FLEURS,params={"dataset":"google/fleurs","config":"it_it","split":"test","offset":offset,"length":32},timeout=(15,120))
+        response.raise_for_status()
+        rows=response.json().get("rows",[])
+        if not rows: break
+        for entry in rows:
+            row=entry["row"]
             ref=row["transcription"].strip()
             if ref in seen or not ref: continue
-            data=row["audio"]["bytes"]
-            if not data: raise ValueError("FLEURS parquet missing embedded audio")
-            x=decode_bytes(data)
+            assets=row["audio"]
+            if isinstance(assets,dict): assets=[assets]
+            url=next((a["src"] for a in assets if isinstance(a,dict) and a.get("src")),None)
+            if not url or not url.startswith("https://"): raise ValueError("No HTTPS FLEURS audio URL")
+            path=folder/"fleurs-clip.audio"
+            download(url,path,12_000_000)
+            x=decode_bytes(path.read_bytes())
             if not 1<=len(x)/16000<=25: continue
             seen.add(ref); clips.append((pcm(x),ref))
             if len(clips)==count: return clips
     raise ValueError(f"Only {len(clips)} eligible independent clips")
+
 
 def real_noises(folder):
     result={}
@@ -87,12 +94,16 @@ def evaluate(model,items,book=None,train=False):
         original=decision.options[0].hearing.text
         chosen=next(o for o in decision.options if o.key==decision.selected).hearing.text
         qa,qb=analyze(reference,original),analyze(reference,chosen)
+        # Evaluation-only oracle: theoretical best among usable candidates.
+        # Never passed to the selector or used as real deployment performance.
+        oracle=min((o for o in decision.options if o.hearing.usable or o.key=="original"),key=lambda o:analyze(reference,o.hearing.text)["word_errors"])
+        qo=analyze(reference,oracle.hearing.text)
         counts["improved" if qb["word_errors"]<qa["word_errors"] else "worsened" if qb["word_errors"]>qa["word_errors"] else "unchanged"]+=1
-        records.append({"reference":reference,"category":case,"hypotheses":{"original":original,"supervisor":chosen}})
+        records.append({"reference":reference,"category":case,"hypotheses":{"original":original,"supervisor":chosen,"oracle_diagnostic":oracle.hearing.text}})
         row={"sample":label,"case":case,"profile":decision.profile.label,"selected":decision.selected,
              "reason":decision.reason,"errors":decision.errors,"original_wer":qa["wer"],"selected_wer":qb["wer"],
              "original_critical":qa["critical_differences"],"selected_critical":qb["critical_differences"],
-             "elapsed_ms":elapsed,"candidates":len(decision.options)}
+             "elapsed_ms":elapsed,"candidates":len(decision.options),"oracle_wer":qo["wer"],"oracle_key":oracle.key}
         rows.append(row); print(json.dumps(row),flush=True)
         if train: book.observe(decision,reference,verified=True)
     return {"overall":score_dataset(records),"per_case":{c:score_dataset([r for r in records if r["category"]==c]) for c in sorted(set(r["category"] for r in records))},"paired":dict(counts),"rows":rows}

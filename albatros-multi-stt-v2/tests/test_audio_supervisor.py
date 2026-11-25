@@ -40,5 +40,19 @@ class SupervisorTests(unittest.TestCase):
         self.assertTrue(d.errors)
         with self.assertRaises(ValueError): FeedbackBook().observe(d,"ciao")
 
+    def test_single_supported_alternative(self):
+        p=profile(self.a)
+        first=plan(p)[0]
+        key=f"{p.label}|{first[0]}:{int(first[1]*100)}"
+        book=FeedbackBook({key:{"n":12,"wins":4,"losses":0,"critical":0,"delta":4}})
+        def rec(a): return Hearing("questa prova" if a.pcm==self.a.pcm else "questa frase",-.7 if a.pcm==self.a.pcm else -.4,True)
+        d=select(self.a,rec,book=book,budget=1,filter_fn=self.filt,vad_fn=lambda a:[(0,16000)])
+        self.assertEqual(d.reason,"verified_policy_alternative")
+
+    def test_weak_single_stays_original(self):
+        def rec(a): return Hearing("questa prova" if a.pcm==self.a.pcm else "questa frase",-.5 if a.pcm==self.a.pcm else -.48,True)
+        d=select(self.a,rec,budget=1,filter_fn=self.filt,vad_fn=lambda a:[(0,16000)])
+        self.assertEqual(d.selected,"original")
+
     def test_guard_rejects_erasure(self):
         self.assertIsNone(guard(self.a,audio(np.zeros_like(self.x)),1,[(0,16000)])[0])
