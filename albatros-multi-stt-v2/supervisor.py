@@ -9,6 +9,7 @@ import math
 import sys
 
 from agent import Result, judge, conflicts, normalize
+from fusion import fuse
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,9 @@ def decide(results):
                 return Verdict("retry", "", "critical_disagreement")
     selected = judge(valid)
     if selected is None:
-        return Verdict("retry", "", "low_agreement")
+        fused = fuse(valid)
+        if fused.status == "accepted":
+            return Verdict("accepted", fused.text, "word_level_fusion", "fusion")
+        return Verdict("retry", "", fused.reason)
     # Exact original words from a selected engine, not rewritten by a model.
     return Verdict("accepted", selected.text, "independent_agreement", selected.engine)
