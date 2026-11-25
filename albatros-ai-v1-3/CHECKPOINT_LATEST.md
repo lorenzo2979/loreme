@@ -99,3 +99,15 @@ Questa decisione NON significa che Home Assistant o la voce siano già integrati
 - Aggiornata documentazione `HA_V15.md`.
 - **Non dichiarare collaudata end-to-end questa fase**: il codice è sul ramo GitHub, ma l'utente ha rinviato tutte le prove manuali. Nessuna credenziale reale o modifica a Home Assistant, Alexa, LUMO, DietPi.
 - **Prossime attività di sviluppo senza prove manuali dell'utente:** rifinire limiti delle risposte, robustezza ed eventuale vista di stato nell'interfaccia, conservare memoria e credenziali fuori GitHub; collaudo integrato quando l'utente lo richiederà.
+
+
+## Priorità aggiornata: ALBATROS Speech+ italiano — 25 novembre 2026
+
+**Decisione utente:** la massima priorità non è aggiungere altre capacità AI, ma rendere affidabile la trascrizione **esatta** del parlato italiano. Non creare un ASR da zero: migliorare e misurare i motori esistenti; evitare lo STT di LUMO. L'utente preferisce rinviare le prove manuali fino a un collaudo cumulativo.
+
+- Recuperato il prototipo `albatros-multi-stt-v2/` già presente nel ramo `albatros-ai-v1-3`; non è un sistema vocale pronto all'uso.
+- Modificato `albatros-multi-stt-v2/engine_runner.py`: Whisper italiano beam size 5 modificabile (1–10), suggerimenti lessicali opzionali `WHISPER_ITALIAN_HINTS` (max 300 caratteri), mantenuto VAD e divieto di utilizzare il contesto precedente.
+- Creato `albatros-multi-stt-v2/italian_quality.py` per valutazione offline WER/CER, frasi esatte, errori in verbi opposti, negazioni e numeri.
+- Creati `tests/test_italian_quality.py` e `ITALIAN_STT_QUALITY.md`.
+- **Non affermare che l'accuratezza italiana sia già aumentata:** mancano registrazioni di riferimento e misure reali. Non è stato installato alcun modello/servizio su DietPi; nessuna modifica a Home Assistant, Alexa, Orange Pi o LUMO.
+- **Priorità successiva:** dati italiani volontari e privati, analisi di tagli audio/VAD, benchmark per motore, selettore prudente; solo poi collaudo Wyoming standalone e integrazione domestica.
