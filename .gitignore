@@ -1,0 +1,6 @@
+
+# ALBATROS AI - dati privati
+albatros-ai-v1-3/data/
+albatros-backup.sqlite3
+*.sqlite3
+.env
