@@ -59,7 +59,10 @@ class HAReadOnly:
         if mode not in ("mock", "live"):
             raise ValueError("Modalità non consentita")
         self.mode = mode
-        self.opener = opener or urllib.request.urlopen
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                return None
+        self.opener = opener or urllib.request.build_opener(NoRedirect()).open
         self.url = None
         self.token = None
         if mode == "live":
