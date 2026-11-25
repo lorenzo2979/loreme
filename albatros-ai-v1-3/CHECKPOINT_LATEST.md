@@ -45,3 +45,18 @@ Se `git pull` segnala divergenze, fermarsi e controllare: **non usare automatica
 5. Consentire all'utente di riprendere il lavoro anche da smartphone, mantenendo la configurazione domestica stabile.
 
 **Messaggio da usare in una nuova chat:** «Riprendiamo ALBATROS AI: leggi `albatros-ai-v1-3/CHECKPOINT_LATEST.md` dal ramo `albatros-ai-v1-3` del repository GitHub `lorenzo2979/loreme` e continua dal prossimo passo.»
+
+## Decisione architetturale confermata — 25 novembre 2026
+
+**Obiettivo scelto esplicitamente dall'utente: la seconda opzione.** ALBATROS AI deve diventare **l'intelligenza centrale personale e domestica**, non soltanto un gestore di progetti: conversazione, memoria persistente, gestione attività e, in seguito, orchestrazione di Home Assistant tramite il satellite vocale Alexa già funzionante. La voce deve essere uno dei canali di interazione, non l'unico.
+
+- **Gemini:** componente di ragionamento; il modello non deve poter invocare arbitrariamente servizi o dispositivi.
+- **ALBATROS:** agente che media richieste, controlla autorizzazioni, mantiene memoria e seleziona strumenti consentiti.
+- **Home Assistant:** sorgente degli stati e attuatore di servizi, con integrazione esplicita, minima e verificabile; inizialmente solo lettura.
+- **Alexa ESP32-S3 già funzionante:** NON sostituirla o alterare ora firmware/pipeline; l'integrazione vocale si farà dopo prove isolate.
+- **Home Assistant/Music Assistant/DietPi attuali:** preservarli senza interruzioni, e chiedere conferma prima di qualsiasi azione operativa.
+- **Sicurezza:** credenziali solo fuori GitHub; prima sola lettura e dispositivi di test, poi comandi limitati per stanza/dispositivo con autorizzazione; escludere inizialmente serrature, allarmi e attuazioni ad alto rischio.
+
+**Ordine aggiornato:** (1) collaudo reale chat web V1.4 da Codespaces e smartphone; (2) definizione modulo Home Assistant in sola lettura con test mock e configurazione sicura; (3) prova controllata su un'entità di test; (4) funzioni domotiche autorizzate; (5) collegamento vocale con il satellite Alexa, mantenendo il sistema già funzionante.
+
+Questa decisione NON significa che Home Assistant o la voce siano già integrati: è il requisito di prodotto da seguire nelle prossime versioni.
