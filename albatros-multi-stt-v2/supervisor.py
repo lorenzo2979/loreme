@@ -62,6 +62,15 @@ def decide(results):
         for other in valid[i+1:]:
             if conflicts(first.text, other.text):
                 return Verdict("retry", "", "critical_disagreement")
+    # Three distinct recognized tokens at an aligned position are not
+    # a reliable majority, even when their spellings are very similar.
+    # This avoids silently accepting e.g. Vasco / Basco / Bosco.
+    if len({r.engine for r in valid}) >= 3:
+        word_lists = [normalize(r.text).split() for r in valid]
+        if len({len(words) for words in word_lists}) == 1:
+            if any(len({words[i] for words in word_lists}) >= 3
+                   for i in range(len(word_lists[0]))):
+                return Verdict("retry", "", "ambiguous_word")
     selected = judge(valid)
     if selected is None:
         fused = fuse(valid)
