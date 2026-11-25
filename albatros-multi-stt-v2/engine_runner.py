@@ -56,6 +56,21 @@ async def send_audio(writer,audio):
         await writer.drain()
     await write_event(writer,"audio-stop")
 
+def whisper_options():
+    """Conservative Italian recognition settings; hints never replace audio."""
+    beam = int(os.getenv("WHISPER_BEAM_SIZE", "5"))
+    if not 1 <= beam <= 10:
+        raise ValueError("WHISPER_BEAM_SIZE deve essere tra 1 e 10")
+    hints = os.getenv("WHISPER_ITALIAN_HINTS", "").strip()
+    if len(hints) > 300 or any(ord(c) < 32 for c in hints):
+        raise ValueError("WHISPER_ITALIAN_HINTS non valido")
+    options = {"language": "it", "beam_size": beam,
+               "condition_on_previous_text": False, "vad_filter": True}
+    if hints:
+        options["hotwords"] = hints
+    return options
+
+
 def whisper_local(audio):
     global _WHISPER
     if not env_on("ENABLE_WHISPER"): return ""
@@ -65,8 +80,7 @@ def whisper_local(audio):
         _WHISPER=WhisperModel(os.getenv("WHISPER_MODEL","base"),device="cpu",
             compute_type="int8",download_root="/models/whisper")
     samples=np.frombuffer(audio.pcm,dtype="<i2").astype(np.float32)/32768.0
-    segments,_=_WHISPER.transcribe(samples,language="it",beam_size=3,
-        condition_on_previous_text=False,vad_filter=True)
+    segments,_=_WHISPER.transcribe(samples,**whisper_options())
     return " ".join(x.text.strip() for x in segments)
 
 def groq(audio):
