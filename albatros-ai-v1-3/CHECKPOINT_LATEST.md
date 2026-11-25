@@ -163,3 +163,10 @@ Questa decisione NON significa che Home Assistant o la voce siano già integrati
 - Workflow `.github/workflows/albatros-multi-stt.yml` aggiornato per eseguire test STT su ramo attivo `albatros-ai-v1-3`.
 - **Modulo audio NON ancora inserito automaticamente nella pipeline STT:** per evitare che filtri non collaudati alterino il riconoscimento in produzione, prossimo passo collegamento con opt-in su banco di prova e confronto WER/CER originale vs processato.
 - Nessuna modifica a firmware/dispositivi reali o Home Assistant. Collaudo audio reale rinviato come da richiesta; test automatici software da verificare.
+
+
+### Verifica automatica Speech+ (25 novembre 2026)
+- Abilitato workflow Multi-STT sul ramo attivo; trovati e corretti tre problemi preesistenti: test audio che usava silenzio nonostante il controllo qualità, conteggio inserimenti/cancellazioni nella misura WER, accettazione erronea di parole simili ma diverse nel supervisore.
+- Il supervisore ora richiede accordo **esatto** fra due famiglie indipendenti oppure fusione per parola con conferme sufficienti: non basta una somiglianza testuale.
+- Commit tecnico `f6281fa36b3d3ecffc09d8f54d9656354939aa7f`; [GitHub Actions 45671213037](https://github.com/lorenzo2979/loreme/actions/runs/45671213037) **success** per suite sperimentale STT.
+- Restano NON verificati accuratezza su audio reale, confronto segnale calibrato vs originale e uso su dispositivi domestici. Il DSP `audio_calibration.py` resta standalone, non attivo automaticamente sulla pipeline.
