@@ -1,14 +1,11 @@
-# GW006 IR Universal — REV16 Wi-Fi profile provisioning core
+# ALBATROS AI
 
-REV15 open APConfig has been published for native SDK build. REV16 adds
-bounded form decoding and an atomic-profile **backend contract**. The
-HTTP AP-only portal, DHCP, verified board pin, persistent storage and
-live Wi-Fi association remain to be implemented and physically tested.
+Repository del progetto ALBATROS AI e del prototipo Multi-STT.
 
-- APConfig: OPEN Wi-Fi, no password/login, hold PCB button for 5s, auto-close after 5min.
-- STA: keep previous credentials until verification succeeds; never erase on a failed edit.
-- Normal IR TCP: fixed port **42424**; HMAC auth, distinct from APConfig.
-- DuckDNS: future Android settings integration; no enabled DDNS service here.
-- No flash of GW006. Keep OpenBeken 1.18.321.
+- `albatros-ai-v1-3/`: agente personale testuale con memoria SQLite, progetti e strumenti.
+- `albatros-multi-stt-v2/`: prototipo sperimentale Wyoming e Multi-STT, non pronto per produzione.
+- `.github/workflows/albatros-ai-v13.yml`: controlli automatici dell'agente.
 
-See docs/REV16_PROVISIONING_VALIDATION.md and CP-07 in GitHub.
+Il progetto GW006, relativo a hardware non più posseduto, è stato escluso dalla versione corrente. I commit storici sono ancora rintracciabili nella cronologia Git finché esistono riferimenti.
+
+Non pubblicare token o file `.env`.

@@ -1,0 +1,12 @@
+{
+  "name": "ALBATROS AI Python Lab",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.11-bullseye",
+  "workspaceFolder": "/workspaces/loreme",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+      }
+    }
+  }
+}

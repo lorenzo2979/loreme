@@ -1,0 +1,10 @@
+# Experimental judge only: not a working Wyoming STT service.
+services:
+  albatros-multi-stt:
+    build: .
+    container_name: albatros-multi-stt-experimental
+    restart: "no"
+    env_file:
+      - .env
+    security_opt:
+      - no-new-privileges:true
