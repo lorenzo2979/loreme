@@ -73,16 +73,19 @@ def whisper_options():
     return options
 
 
-def whisper_local(audio):
+def get_whisper():
     global _WHISPER
-    if not env_on("ENABLE_WHISPER"): return ""
-    import numpy as np
     from faster_whisper import WhisperModel
     if _WHISPER is None:
         _WHISPER=WhisperModel(os.getenv("WHISPER_MODEL","base"),device="cpu",
             compute_type="int8",download_root="/models/whisper")
+    return _WHISPER
+
+def whisper_local(audio):
+    if not env_on("ENABLE_WHISPER"): return ""
+    import numpy as np
     samples=np.frombuffer(audio.pcm,dtype="<i2").astype(np.float32)/32768.0
-    segments,_=_WHISPER.transcribe(samples,**whisper_options())
+    segments,_=get_whisper().transcribe(samples,**whisper_options())
     return " ".join(x.text.strip() for x in segments)
 
 def groq(audio):
@@ -133,7 +136,15 @@ async def run(audio):
     if quality != "ok":
         LOG.info("audio rejected reason=%s", quality)
         return ""
-    if env_on("ENABLE_AUDIO_AGENT"):
+    if env_on("ENABLE_AUDIO_SUPERVISOR") and env_on("ENABLE_WHISPER"):
+        try:
+            from audio_supervisor import select, recognize
+            selection = await asyncio.to_thread(lambda: select(audio, lambda a: recognize(get_whisper(), a)))
+            audio = selection.audio
+            LOG.info("audio_supervisor profile=%s selected=%s reason=%s", selection.profile.label, selection.selected, selection.reason)
+        except Exception as exc:
+            LOG.warning("audio_supervisor failed (%s); keeping original", type(exc).__name__)
+    elif env_on("ENABLE_AUDIO_AGENT"):
         from audio_agent import prepare
         preparation = await asyncio.to_thread(prepare, audio)
         audio = preparation.selected

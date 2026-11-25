@@ -1,0 +1,125 @@
+"""Exploratory supervisor test: old corpus for feedback, separate FLEURS test
+recordings mixed with recorded DEMAND noise. No test reference enters selection.
+Audio and transcript contents are not uploaded in result artifacts.
+"""
+import collections
+import hashlib
+import io
+import json
+import os
+from pathlib import Path
+import tempfile
+import time
+import wave
+import zipfile
+import subprocess
+import numpy as np
+import requests
+import pyarrow.parquet as pq
+from audio_agent_benchmark import NAMES,CASES,load,simulate,pcm,WhisperModel
+from audio_supervisor import select,recognize,FeedbackBook
+from audio_filter_bank import samples
+from italian_quality import analyze,score_dataset
+
+FLEURS="https://huggingface.co/datasets/google/fleurs/resolve/8e74c3a7c16ffd851ceb9d50012daa64122d6734/it_it/test-00000-of-00001.parquet"
+DEMAND="https://zenodo.org/records/1227121/files/"
+NOISES={"kitchen":"DKITCHEN_16k.zip","street":"SPSQUARE_16k.zip"}
+
+def download(url,path,limit=750_000_000):
+    with requests.get(url,stream=True,timeout=(15,120)) as r:
+        r.raise_for_status()
+        count=0
+        with open(path,"wb") as f:
+            for chunk in r.iter_content(1024*1024):
+                count+=len(chunk)
+                if count>limit: raise ValueError("Download exceeded limit")
+                f.write(chunk)
+    print("downloaded",path.name,count,flush=True)
+
+def decode_bytes(data):
+    raw=subprocess.run(["ffmpeg","-nostdin","-v","error","-i","pipe:0","-f","s16le","-ar","16000","-ac","1","pipe:1"],
+                       input=data,stdout=subprocess.PIPE,stderr=subprocess.PIPE,check=True,timeout=30).stdout
+    return np.frombuffer(raw,dtype="<i2").astype(np.float32)/32768
+
+def independent_corpus(folder,count):
+    path=folder/"fleurs-it-test.parquet"
+    download(FLEURS,path)
+    table=pq.ParquetFile(path)
+    clips=[]; seen=set()
+    # Fixed ordering, duplicate text excluded before seeing results.
+    for batch in table.iter_batches(batch_size=16,columns=["audio","transcription"]):
+        for row in batch.to_pylist():
+            ref=row["transcription"].strip()
+            if ref in seen or not ref: continue
+            data=row["audio"]["bytes"]
+            if not data: raise ValueError("FLEURS parquet missing embedded audio")
+            x=decode_bytes(data)
+            if not 1<=len(x)/16000<=25: continue
+            seen.add(ref); clips.append((pcm(x),ref))
+            if len(clips)==count: return clips
+    raise ValueError(f"Only {len(clips)} eligible independent clips")
+
+def real_noises(folder):
+    result={}
+    for label,filename in NOISES.items():
+        path=folder/filename; download(DEMAND+filename+"?download=1",path,250_000_000)
+        with zipfile.ZipFile(path) as z:
+            member=next(n for n in z.namelist() if Path(n).name.lower()=="ch01.wav")
+            raw=z.read(member)
+        result[label]=decode_bytes(raw)
+    return result
+
+def mix_real(audio,noise,seed,snr):
+    x=samples(audio)
+    rng=np.random.default_rng(seed)
+    if len(noise)<len(x): raise ValueError("Noise too short")
+    start=int(rng.integers(0,len(noise)-len(x)+1))
+    n=noise[start:start+len(x)].copy(); n-=n.mean()
+    n*=np.sqrt(np.mean(x*x))/max(float(np.sqrt(np.mean(n*n))),1e-9)*10**(-snr/20)
+    y=x+n; return pcm(y*min(1.,.98/max(float(np.max(abs(y))),1e-9)))
+
+def evaluate(model,items,book=None,train=False):
+    records=[]; rows=[]; counts=collections.Counter()
+    for label,case,audio,reference in items:
+        start=time.perf_counter()
+        decision=select(audio,lambda a:recognize(model,a),book=book if not train else None,budget=3)
+        elapsed=round((time.perf_counter()-start)*1000,1)
+        original=decision.options[0].hearing.text
+        chosen=next(o for o in decision.options if o.key==decision.selected).hearing.text
+        qa,qb=analyze(reference,original),analyze(reference,chosen)
+        counts["improved" if qb["word_errors"]<qa["word_errors"] else "worsened" if qb["word_errors"]>qa["word_errors"] else "unchanged"]+=1
+        records.append({"reference":reference,"category":case,"hypotheses":{"original":original,"supervisor":chosen}})
+        row={"sample":label,"case":case,"profile":decision.profile.label,"selected":decision.selected,
+             "reason":decision.reason,"errors":decision.errors,"original_wer":qa["wer"],"selected_wer":qb["wer"],
+             "original_critical":qa["critical_differences"],"selected_critical":qb["critical_differences"],
+             "elapsed_ms":elapsed,"candidates":len(decision.options)}
+        rows.append(row); print(json.dumps(row),flush=True)
+        if train: book.observe(decision,reference,verified=True)
+    return {"overall":score_dataset(records),"per_case":{c:score_dataset([r for r in records if r["category"]==c]) for c in sorted(set(r["category"] for r in records))},"paired":dict(counts),"rows":rows}
+
+def main():
+    model=WhisperModel("base",device="cpu",compute_type="int8",cpu_threads=2,num_workers=1)
+    book=FeedbackBook()
+    old=[]
+    for i,name in enumerate(NAMES):
+        clean,ref=load(name)
+        for case in CASES: old.append((name,case,simulate(clean,case,25112026+i),ref))
+    dev=evaluate(model,old,book,train=True)
+    summary={"development":dev,"feedback":book.snapshot()}
+    print("SUPERVISOR_DEV="+json.dumps(summary),flush=True)
+    with open("supervisor-dev.json","w") as f: json.dump(summary,f,indent=2)
+    # Explicitly freeze feedback before looking at independent references.
+    frozen=FeedbackBook(book.snapshot())
+    with tempfile.TemporaryDirectory() as tmp:
+        folder=Path(tmp); clips=independent_corpus(folder,24); noises=real_noises(folder)
+        items=[]
+        for i,(clean,ref) in enumerate(clips):
+            items.extend([(f"fleurs-{i:02d}","clean",clean,ref),
+                          (f"fleurs-{i:02d}","kitchen_5dB",mix_real(clean,noises["kitchen"],100+i,5),ref),
+                          (f"fleurs-{i:02d}","street_10dB",mix_real(clean,noises["street"],200+i,10),ref)])
+        heldout=evaluate(model,items,frozen)
+    summary["heldout"]=heldout
+    print("SUPERVISOR_SUMMARY="+json.dumps(summary),flush=True)
+    with open("supervisor-result.json","w") as f: json.dump(summary,f,indent=2)
+
+if __name__=="__main__": main()
