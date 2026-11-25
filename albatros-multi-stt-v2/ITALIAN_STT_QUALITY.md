@@ -39,3 +39,14 @@ Il router esistente Multi-STT V2 è **prototipale**: manca build/integrazione re
 - Confronto di modelli locali adatti all'hardware DietPi e criteri di selezione dell'output basati su prove; non affidarsi alla concordanza fra modelli come garanzia assoluta.
 - Diagnostica di endpoint audio: VAD/taglio inizio/fine, volume, eco e rumore; distinguere riconoscimento acustico da trascrizione.
 - Solo dopo: Wyoming standalone e integrazione controllata in Home Assistant.
+
+
+## Fusione controllata delle parole — prototipo
+
+- `fusion.py` combina **solo** parole effettivamente riconosciute da motori diversi, e soltanto se almeno due *famiglie di modelli* concordano sulla stessa parola nella stessa posizione. Whisper locale e Groq Whisper appartengono alla stessa famiglia e non valgono come due conferme indipendenti.
+- Il supervisore `supervisor.py` usa la fusione come fallback quando non esiste una trascrizione completa concordante. Con negazioni/opposizioni discordanti, parole inserite o omesse, o parole senza conferma, restituisce richiesta di ripetizione (nel gateway attuale: testo vuoto).
+- La versione attuale **non effettua allineamento temporale o riascolto del segmento audio**: può combinare erroneamente parole se le frasi hanno parole allineate per posizione ma riferite a segmenti diversi. L'accordo tra modelli non è garanzia di verità.
+- I test `tests/test_fusion.py` usano **trascrizioni sintetiche**, non registrazioni reali. Non presentare questo lavoro come STT impeccabile; misurare i risultati su corpus italiano verificato prima di installarlo sulla pipeline domestica.
+
+### Sviluppo successivo
+Allineamento con timestamp e confidenze calibrate, selettore dei segmenti incerti, una seconda decodifica basata sull'audio originale, verifica negazioni e numeri; segnalare esplicitamente incertezza quando l'audio non permette una conclusione. Misurare WER, percentuale di frasi completamente corrette, tasso di astensione, falsi comandi ed effettiva latenza.
