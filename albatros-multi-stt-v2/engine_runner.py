@@ -133,6 +133,11 @@ async def run(audio):
     if quality != "ok":
         LOG.info("audio rejected reason=%s", quality)
         return ""
+    if env_on("ENABLE_AUDIO_AGENT"):
+        from audio_agent import prepare
+        preparation = await asyncio.to_thread(prepare, audio)
+        audio = preparation.selected
+        LOG.info("audio_agent decision=%s", preparation.reason)
     answers=[]
     for name in ORDER:
         if name=="whisper_local" and not env_on("ENABLE_WHISPER"):continue
