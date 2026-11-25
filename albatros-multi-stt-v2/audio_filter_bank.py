@@ -85,14 +85,19 @@ def deepfilter(audio):
     with tempfile.TemporaryDirectory() as tmp:
         base=Path(tmp); src=base/"input.wav"; dest=base/"out"; dest.mkdir()
         x=samples(audio)
-        write_wav(src,resample_poly(np.pad(x,(0,3200)),3,1),48000)
-        run_tool([os.getenv("DEEP_FILTER_BIN","deep-filter"),"-D","-o",str(dest),str(src)],90)
+        # Restore the input scale after processing. Quiet speech may be
+        # below the model's intended operating level; bound boost and peaks.
+        rms=float(np.sqrt(np.mean(x*x)))
+        peak=float(np.max(np.abs(x)))
+        scale=min(max(1.,10**(-24/20)/max(rms,1e-8)),10**(18/20),.9/max(peak,1e-8))
+        write_wav(src,resample_poly(np.pad(x*scale,(0,3200)),3,1),48000)
+        run_tool([os.getenv("DEEP_FILTER_BIN","deep-filter"),"-D","-a","12","-o",str(dest),str(src)],90)
         files=list(dest.glob("*.wav"))
         if len(files)!=1: raise ValueError("Expected one DeepFilterNet output")
         y=decode_wav(files[0])
         if not len(x)<=len(y)<=len(x)+4000:
             raise ValueError(f"DeepFilterNet output length {len(y)}; input {len(x)}")
-        return output(audio,y[:len(x)])
+        return output(audio,y[:len(x)]/scale)
 
 def rnnoise(audio):
     lib=ctypes.CDLL(os.getenv("RNNOISE_LIB") or ctypes.util.find_library("rnnoise") or "librnnoise.so")
@@ -127,19 +132,20 @@ def run_tool(cmd,timeout):
     return proc
 
 def webrtc(audio):
-    # AEC disabled: no playback reference. Feed aligned 10 ms PCM frames
-    # directly; avoid WAV parser negotiation and preserve the tail.
+    # Same WebRTC Python wrapper used by Wyoming Satellite. AEC needs
+    # playback reference and is not part of this implementation.
+    from webrtc_noise_gain import AudioProcessor
+    processor=AudioProcessor(3,2)
     x=samples(audio)
-    padded=np.pad(x,(0,(-len(x))%160+1600))
-    with tempfile.TemporaryDirectory() as tmp:
-        src=Path(tmp)/"in.raw"; dest=Path(tmp)/"out.raw"
-        src.write_bytes(np.rint(np.clip(padded,-1,32767/32768)*32768).astype("<i2").tobytes())
-        cmd=["gst-launch-1.0","-q","filesrc","location="+str(src),"!","rawaudioparse","format=pcm","pcm-format=s16le","sample-rate=16000","num-channels=1","!","audioconvert","!","audioresample","!","audio/x-raw,format=S16LE,rate=16000,channels=1","!","webrtcdsp","echo-cancel=false","noise-suppression=true","gain-control=true","!","audioconvert","!","audio/x-raw,format=S16LE,rate=16000,channels=1","!","filesink","location="+str(dest)]
-        run_tool(cmd,60)
-        y=np.frombuffer(dest.read_bytes(),dtype="<i2").astype(np.float32)/32768
-        if not len(x)<=len(y)<=len(padded):
-            raise ValueError(f"WebRTC output length {len(y)}; input {len(x)}")
-        return output(audio,y[:len(x)])
+    raw=audio.pcm+b"\x00"*(2*((-len(x))%160+1600))
+    frames=[]
+    for i in range(0,len(raw),320):
+        chunk=bytes(processor.Process10ms(raw[i:i+320]).audio)
+        if len(chunk)!=320: raise ValueError("Unexpected WebRTC frame length")
+        frames.append(chunk)
+    y=np.frombuffer(b"".join(frames),dtype="<i2").astype(np.float32)/32768
+    return output(audio,y[:len(x)])
+
 
 def ffmpeg_filter(audio):
     # Conservative broadband filter plus high-pass, not automatic dereverb.
