@@ -1,11 +1,14 @@
 import asyncio
 import os
+import math
+import struct
 import unittest
 from unittest.mock import patch, AsyncMock
 from wyoming_server import Audio
 import engine_runner
 
-AUDIO=Audio(pcm=b"\x00\x00"*320,rate=16000,width=2,channels=1)
+# Synthetic non-silent sample: the quality gate correctly rejects silence.
+AUDIO=Audio(pcm=b"".join(struct.pack("<h", int(3000*math.sin(2*math.pi*220*i/16000))) for i in range(16000)),rate=16000,width=2,channels=1)
 
 class TestEngineRunner(unittest.IsolatedAsyncioTestCase):
     async def test_two_matching_texts_win_once(self):
