@@ -60,3 +60,19 @@ Se `git pull` segnala divergenze, fermarsi e controllare: **non usare automatica
 **Ordine aggiornato:** (1) collaudo reale chat web V1.4 da Codespaces e smartphone; (2) definizione modulo Home Assistant in sola lettura con test mock e configurazione sicura; (3) prova controllata su un'entità di test; (4) funzioni domotiche autorizzate; (5) collegamento vocale con il satellite Alexa, mantenendo il sistema già funzionante.
 
 Questa decisione NON significa che Home Assistant o la voce siano già integrati: è il requisito di prodotto da seguire nelle prossime versioni.
+
+
+## Collaudo reale V1.4 completato — 25 novembre 2026
+
+**Verificato dall'utente nel Codespace GitHub "stunning lamp", ramo `albatros-ai-v1-3`:**
+- `git status --short` pulito; `git pull --ff-only origin albatros-ai-v1-3` completato con fast-forward.
+- `python -m unittest discover -s tests -v`: **29 test superati (OK)**.
+- Chat web aperta tramite forwarding privato della porta 8765: messaggio «ciao» e risposta appropriata ottenuta, dimostrando l'operatività della chat e del provider Gemini.
+- Richiesta «Quali progetti ho salvato nella tua memoria?» ha restituito il progetto **ALBATROS AI** con descrizione «sviluppo del mio agente intelligente personale».
+- Richiesta «Quali attività ho ancora da completare nel progetto ALBATROS AI?» ha restituito «Integrare l'assistente vocale», **ID 1**, ancora da completare.
+- Le verifiche precedenti sono confermate da schermate mostrate dall'utente in chat. La memoria SQLite resta nel Codespace. **La cronologia visibile delle conversazioni web non è persistente**, e il Codespace può sospendersi.
+- Il software e i satelliti vocali domestici non sono stati modificati. **Home Assistant non è ancora integrato.**
+
+**Prossimo passo concordato:** V1.5, costruire e testare un modulo Home Assistant **sola lettura**, prima con risposte mock e senza usare credenziali reali o modificare impianti, poi prova controllata; successivamente funzioni con autorizzazione e integrazione vocale.
+
+**LUMO:** firmware acquistato in formato immagine Raspberry Pi `.img.gz`, molto grande; analisi locale futura in sola lettura, senza caricarlo su GitHub. Lo STT di LUMO è escluso dagli obiettivi; non assumere che modelli/componenti proprietari siano riutilizzabili senza verificare licenze.
