@@ -153,3 +153,13 @@ Questa decisione NON significa che Home Assistant o la voce siano già integrati
 - Creato `tests/test_autocalibrate.py` con test unitari per regolazione guadagno, VAD, rollback, limiti e regresso dei comandi critici.
 - **Non ancora collegato ai veri microfoni.** Per applicare le regolazioni automatiche servono adattatori specifici per firmware/device (Alexa ESPHome, Orange Pi ecc.), lettura/scrittura dei parametri realmente supportati, snapshot e ripristino verificabile. Un'opzione astratta di gain/pre-roll non prova che l'hardware la esponga. Niente modifiche a Home Assistant, Alexa o LUMO.
 - **Nessuna ottimizzazione con parlato reale ancora misurata**; le soglie in codice sono ipotesi iniziali, da verificare prima di permettere attuazione automatica. Le operazioni di calibrazione dovranno restare isolate e con consenso iniziale esplicito per ogni dispositivo. Non promettere 100% di trascrizione corretta.
+
+
+## Speech+ calibrazione del segnale audio (25 novembre 2026)
+
+**Requisito:** ALBATROS deve analizzare e calibrare direttamente l'**audio registrato**, non soltanto consigliare o modificare i parametri del microfono.
+- Aggiunto `albatros-multi-stt-v2/audio_calibration.py`: modulo DSP offline per PCM16 mono/16kHz; misura RMS, picco, offset DC, saturazione; rimuove componente continua lenta e applica regolazione di livello limitata con margine anticlipping. Restituisce **sia audio originale sia copia elaborata** per confronto A/B. Non tenta di ricostruire parole già tagliate.
+- Aggiunti test sintetici `tests/test_audio_calibration.py` (originale conservato, silenzio e clipping non alterati, offset e limiti).
+- Workflow `.github/workflows/albatros-multi-stt.yml` aggiornato per eseguire test STT su ramo attivo `albatros-ai-v1-3`.
+- **Modulo audio NON ancora inserito automaticamente nella pipeline STT:** per evitare che filtri non collaudati alterino il riconoscimento in produzione, prossimo passo collegamento con opt-in su banco di prova e confronto WER/CER originale vs processato.
+- Nessuna modifica a firmware/dispositivi reali o Home Assistant. Collaudo audio reale rinviato come da richiesta; test automatici software da verificare.
