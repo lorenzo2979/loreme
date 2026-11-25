@@ -14,6 +14,7 @@ from faster_whisper import WhisperModel
 
 from audio_calibration import calibrate
 from noise_reduction import denoise
+from noise_reduction_v2 import denoise_v2
 from italian_quality import analyze
 from wyoming_server import Audio
 
@@ -71,9 +72,13 @@ def main():
         print("Audio report after:",calibrated.after)
         filtered = denoise(audio)
         filtered_calibrated = calibrate(filtered).processed
+        filtered_v2 = denoise_v2(audio)
+        v2_calibrated = calibrate(filtered_v2).processed
         for variant, entry in [("originale",audio),("calibrato",calibrated.processed),
                                ("riduzione_rumore",filtered),
-                               ("riduzione_rumore_e_calibrato",filtered_calibrated)]:
+                               ("riduzione_rumore_e_calibrato",filtered_calibrated),
+                               ("riduzione_rumore_v2",filtered_v2),
+                               ("riduzione_rumore_v2_e_calibrato",v2_calibrated)]:
             hypothesis = decode(model, entry)
             metrics = analyze(reference, hypothesis)
             print(json.dumps({"case":label,"variant":variant,
