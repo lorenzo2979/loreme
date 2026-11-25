@@ -111,3 +111,14 @@ Questa decisione NON significa che Home Assistant o la voce siano già integrati
 - Creati `tests/test_italian_quality.py` e `ITALIAN_STT_QUALITY.md`.
 - **Non affermare che l'accuratezza italiana sia già aumentata:** mancano registrazioni di riferimento e misure reali. Non è stato installato alcun modello/servizio su DietPi; nessuna modifica a Home Assistant, Alexa, Orange Pi o LUMO.
 - **Priorità successiva:** dati italiani volontari e privati, analisi di tagli audio/VAD, benchmark per motore, selettore prudente; solo poi collaudo Wyoming standalone e integrazione domestica.
+
+
+## Speech+ Supervisor — ulteriore sviluppo (25 novembre 2026)
+
+**Richiesta utente:** un vero agente AI che controlli l'intero processo di riconoscimento vocale italiano, non una semplice somma di trascrittori. Priorità assoluta alla fedeltà audio→testo. Mantenere i test domestici per il collaudo finale.
+
+- Aggiunto `albatros-multi-stt-v2/supervisor.py`: prima fase **deterministica**, con verifica formato PCM16/16kHz mono, durata, livello, clipping; decide con accordo di motori indipendenti, blocca conflitti critici e non riscrive il testo pronunciato.
+- Integrato supervisore nel flusso `engine_runner.run()`. La verifica avviene **dopo** aver raccolto le trascrizioni dei motori abilitati; non accetta subito due risultati concordi se un terzo contraddice l'azione. Un esito incerto restituisce stringa vuota al protocollo Wyoming.
+- Creato `tests/test_supervisor.py`, con prove audio PCM sintetiche, accordi, conflitti e router mock. **Non dichiarare superati questi nuovi test senza esecuzione verificata.**
+- Nessun audio reale esaminato; nessun modello STT installato o collaudato end-to-end. La futura parte agentica dovrà osservare qualità, scegliere escalation dei motori e apprendere da errori su dati autorizzati, sempre senza correggere inventando parole e senza agire su dispositivi.
+- Rischio noto: il supervisore prudente può rifiutare frasi corrette con un solo motore o con disaccordi; va misurato il tasso di astensione insieme a WER/CER, errori critici e latenza.
