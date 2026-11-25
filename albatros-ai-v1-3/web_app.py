@@ -164,19 +164,16 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/":
             if not self._authenticated():
-                login = ("""<!doctype html><html lang="it"><meta name="viewport" """
+                login = ("""<!doctype html><html lang="it"><head><meta name="viewport" """
                          """content="width=device-width,initial-scale=1"><meta charset="utf-8">"""
                          """<title>ALBATROS AI — Accesso</title>"""
-                         """<style>body{background:#0b1220;color:#e8eef8;font:16px system-ui;"""
-                         """display:grid;place-items:center;min-height:85vh}main{max-width:360px;"""
-                         """padding:28px;background:#162238;border-radius:18px}"""
-                         """input,button{padding:13px;border-radius:9px;font:inherit;width:100%;"""
-                         """box-sizing:border-box;margin-top:14px}button{background:#5b9dff;color:#081326;"""
-                         """border:0;font-weight:700}</style><main><h1>ALBATROS AI</h1>"""
+                         """<link rel="stylesheet" href="/static/style.css"></head>"""
+                         """<body class="login-page"><main class="login-panel">"""
+                         """<h1>ALBATROS AI</h1>"""
                          """<p>Inserisci il codice mostrato nel terminale Codespaces.</p>"""
                          """<form action="/login" method="post"><input type="password" """
                          """name="password" autocomplete="off" required placeholder="Codice di accesso">"""
-                         """<button>Accedi</button></form></main></html>""").encode()
+                         """<button>Accedi</button></form></main></body></html>""").encode()
                 return self._reply(200, login, "text/html; charset=utf-8")
             return self._reply(200, UI, "text/html; charset=utf-8")
         if self.path in ("/static/style.css", "/static/app.js"):
