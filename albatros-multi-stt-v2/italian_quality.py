@@ -29,7 +29,7 @@ def tokens(text):
 
 def edit_distance(reference, hypothesis):
     """Levenshtein substitutions/deletions/insertions with deterministic ties."""
-    previous = [(i, 0, i, 0) for i in range(len(hypothesis)+1)]
+    previous = [(i, 0, 0, i) for i in range(len(hypothesis)+1)]
     for r in reference:
         current = [(previous[0][0]+1, previous[0][1], previous[0][2]+1, previous[0][3])]
         for j, h in enumerate(hypothesis, 1):
