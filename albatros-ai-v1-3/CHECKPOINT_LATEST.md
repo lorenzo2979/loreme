@@ -122,3 +122,13 @@ Questa decisione NON significa che Home Assistant o la voce siano già integrati
 - Creato `tests/test_supervisor.py`, con prove audio PCM sintetiche, accordi, conflitti e router mock. **Non dichiarare superati questi nuovi test senza esecuzione verificata.**
 - Nessun audio reale esaminato; nessun modello STT installato o collaudato end-to-end. La futura parte agentica dovrà osservare qualità, scegliere escalation dei motori e apprendere da errori su dati autorizzati, sempre senza correggere inventando parole e senza agire su dispositivi.
 - Rischio noto: il supervisore prudente può rifiutare frasi corrette con un solo motore o con disaccordi; va misurato il tasso di astensione insieme a WER/CER, errori critici e latenza.
+
+
+## ALBATROS Speech+ Fusion — fusione trascrizioni (25 novembre 2026)
+
+**Obiettivo utente:** un unico STT che raccolga il meglio dei trascrittori e restituisca con la massima fedeltà possibile le frasi pronunciate in italiano. Non promettere il 100% incondizionato; su input incerto meglio segnalare o ritentare che inventare.
+- Creato `albatros-multi-stt-v2/fusion.py`: fusione conservativa parola per parola solo dove concordano almeno due famiglie di motori diverse (Whisper locale/Groq Whisper considerati correlati); rifiuta conflitti critici e disallineamenti di lunghezza.
+- Collegata fusione a `supervisor.py` come opzione di recupero quando il consenso sull'intera frase fallisce.
+- Creato `tests/test_fusion.py` con verifiche su fusioni sintetiche, motori correlati, parole discordanti e opposizioni.
+- Documentati limiti e prossime migliorie in `ITALIAN_STT_QUALITY.md`: manca allineamento temporale, riascolto selettivo e misurazione con audio italiano autentico. Fusioni senza verifica acustica possono essere sbagliate.
+- **Non è stato effettuato collaudo reale di accuratezza; nessuna modifica alla pipeline Alexa/Home Assistant/LUMO.** Test manuali differiti per decisione utente. Verificare esito GitHub Actions e non confondere con qualità vocale.
