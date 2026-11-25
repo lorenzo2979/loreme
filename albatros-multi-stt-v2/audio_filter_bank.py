@@ -60,9 +60,16 @@ def sherpa_model(engine):
     return s.OfflineSpeechDenoiser(config)
 
 def neural(audio,engine):
-    result=sherpa_model(engine)(samples(audio),16000)
+    x=samples(audio)
+    # Flush the model/STFT with 200 ms extra silence BEFORE processing.
+    # DPDFNet upstream compensates its own delay and appends zeros.
+    # Never pad missing speech in the output; discard only the extra tail.
+    result=sherpa_model(engine)(np.ascontiguousarray(np.pad(x,(0,3200)),dtype=np.float32),16000)
     if result.sample_rate!=16000: raise ValueError("Unexpected output sample rate")
-    return output(audio,result.samples)
+    y=np.asarray(result.samples,dtype=np.float32)
+    if y.ndim!=1 or not len(x)<=len(y)<=len(x)+4000:
+        raise ValueError(f"{engine}: unexpected shape {y.shape}, expected at least {len(x)} samples")
+    return output(audio,y[:len(x)])
 
 def write_wav(path,x,rate):
     with wave.open(str(path),"wb") as w:
@@ -77,20 +84,27 @@ def decode_wav(path):
 def deepfilter(audio):
     with tempfile.TemporaryDirectory() as tmp:
         base=Path(tmp); src=base/"input.wav"; dest=base/"out"; dest.mkdir()
-        write_wav(src,resample_poly(samples(audio),3,1),48000)
-        subprocess.run([os.getenv("DEEP_FILTER_BIN","deep-filter"),"--compensate-delay","--out-dir",str(dest),str(src)],check=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=90)
+        x=samples(audio)
+        write_wav(src,resample_poly(np.pad(x,(0,3200)),3,1),48000)
+        run_tool([os.getenv("DEEP_FILTER_BIN","deep-filter"),"-D","-o",str(dest),str(src)],90)
         files=list(dest.glob("*.wav"))
         if len(files)!=1: raise ValueError("Expected one DeepFilterNet output")
-        return output(audio,decode_wav(files[0]))
+        y=decode_wav(files[0])
+        if not len(x)<=len(y)<=len(x)+4000:
+            raise ValueError(f"DeepFilterNet output length {len(y)}; input {len(x)}")
+        return output(audio,y[:len(x)])
 
 def rnnoise(audio):
     lib=ctypes.CDLL(os.getenv("RNNOISE_LIB") or ctypes.util.find_library("rnnoise") or "librnnoise.so")
     lib.rnnoise_create.argtypes=[ctypes.c_void_p];lib.rnnoise_create.restype=ctypes.c_void_p
     lib.rnnoise_destroy.argtypes=[ctypes.c_void_p];lib.rnnoise_destroy.restype=None
-    lib.rnnoise_get_frame_size.restype=ctypes.c_int
     ptr=ctypes.POINTER(ctypes.c_float)
     lib.rnnoise_process_frame.argtypes=[ctypes.c_void_p,ptr,ptr];lib.rnnoise_process_frame.restype=ctypes.c_float
-    frame=lib.rnnoise_get_frame_size()
+    # RNNoise v0.1 uses fixed 480 samples; newer ABI exposes getter.
+    getter=getattr(lib,"rnnoise_get_frame_size",None)
+    if getter is not None:
+        getter.restype=ctypes.c_int
+    frame=getter() if getter is not None else 480
     if frame!=480: raise ValueError("Unexpected RNNoise frame size")
     x=resample_poly(samples(audio),3,1)*32768
     # Flush the one-frame overlap/add delay; preserve original duration.
@@ -106,14 +120,26 @@ def rnnoise(audio):
         lib.rnnoise_destroy(st)
     return output(audio,resample_poly(y[frame:frame+len(x)]/32768,1,3))
 
+def run_tool(cmd,timeout):
+    proc=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout)
+    if proc.returncode:
+        raise RuntimeError(f"{cmd[0]} exit {proc.returncode}: {proc.stderr.decode(errors='replace')[-3000:]}")
+    return proc
+
 def webrtc(audio):
-    # AEC explicitly disabled: no synchronized playback reference in Wyoming.
+    # AEC disabled: no playback reference. Feed aligned 10 ms PCM frames
+    # directly; avoid WAV parser negotiation and preserve the tail.
+    x=samples(audio)
+    padded=np.pad(x,(0,(-len(x))%160+1600))
     with tempfile.TemporaryDirectory() as tmp:
-        src=Path(tmp)/"in.wav"; dest=Path(tmp)/"out.wav"
-        write_wav(src,samples(audio),16000)
-        cmd=["gst-launch-1.0","-q","filesrc","location="+str(src),"!","wavparse","!","audioconvert","!","audio/x-raw,format=S16LE,rate=16000,channels=1,layout=interleaved","!","webrtcdsp","echo-cancel=false","noise-suppression=true","gain-control=true","!","wavenc","!","filesink","location="+str(dest)]
-        subprocess.run(cmd,check=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=60)
-        return output(audio,decode_wav(dest))
+        src=Path(tmp)/"in.raw"; dest=Path(tmp)/"out.raw"
+        src.write_bytes(np.rint(np.clip(padded,-1,32767/32768)*32768).astype("<i2").tobytes())
+        cmd=["gst-launch-1.0","-q","filesrc","location="+str(src),"!","rawaudioparse","format=pcm","pcm-format=s16le","sample-rate=16000","num-channels=1","!","audioconvert","!","audioresample","!","audio/x-raw,format=S16LE,rate=16000,channels=1","!","webrtcdsp","echo-cancel=false","noise-suppression=true","gain-control=true","!","audioconvert","!","audio/x-raw,format=S16LE,rate=16000,channels=1","!","filesink","location="+str(dest)]
+        run_tool(cmd,60)
+        y=np.frombuffer(dest.read_bytes(),dtype="<i2").astype(np.float32)/32768
+        if not len(x)<=len(y)<=len(padded):
+            raise ValueError(f"WebRTC output length {len(y)}; input {len(x)}")
+        return output(audio,y[:len(x)])
 
 def ffmpeg_filter(audio):
     # Conservative broadband filter plus high-pass, not automatic dereverb.
