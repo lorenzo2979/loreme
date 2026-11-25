@@ -8,8 +8,8 @@ from dataclasses import dataclass
 import math
 import sys
 
-from agent import Result, judge, conflicts, normalize
-from fusion import fuse
+from agent import Result, conflicts, normalize
+from fusion import fuse, FAMILIES
 
 
 @dataclass(frozen=True)
@@ -71,11 +71,15 @@ def decide(results):
             if any(len({words[i] for words in word_lists}) >= 3
                    for i in range(len(word_lists[0]))):
                 return Verdict("retry", "", "ambiguous_word")
-    selected = judge(valid)
-    if selected is None:
-        fused = fuse(valid)
-        if fused.status == "accepted":
-            return Verdict("accepted", fused.text, "word_level_fusion", "fusion")
-        return Verdict("retry", "", fused.reason)
-    # Exact original words from a selected engine, not rewritten by a model.
-    return Verdict("accepted", selected.text, "independent_agreement", selected.engine)
+    # Exact full-phrase agreement requires two different ASR families.
+    for candidate in valid:
+        corroborators = [other for other in valid
+                         if normalize(other.text) == normalize(candidate.text)]
+        if len({FAMILIES.get(other.engine) for other in corroborators
+                if other.engine in FAMILIES}) >= 2:
+            return Verdict("accepted", candidate.text, "independent_exact_agreement",
+                           candidate.engine)
+    fused = fuse(valid)
+    if fused.status == "accepted":
+        return Verdict("accepted", fused.text, "word_level_fusion", "fusion")
+    return Verdict("retry", "", fused.reason)
