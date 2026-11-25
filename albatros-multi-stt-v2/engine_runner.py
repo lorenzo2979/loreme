@@ -10,6 +10,7 @@ import uuid
 import wave
 from agent import Result
 from supervisor import inspect_audio, decide
+from mic_diagnostics import diagnose
 from wyoming_server import Audio, read_event, write_event
 
 LOG = logging.getLogger("albatros.engines")
@@ -123,7 +124,12 @@ def gemini(audio):
 
 async def run(audio):
     """Compare up to four transcriptions; fail closed with empty text if uncertain."""
+    diagnostic = diagnose(audio)
     quality = inspect_audio(audio)
+    if diagnostic.status != "ok" or diagnostic.possible_cut_start or diagnostic.possible_cut_end:
+        LOG.info("microphone status=%s peak_dbfs=%s rms_dbfs=%s suggestions=%s",
+                 diagnostic.status, diagnostic.peak_dbfs, diagnostic.rms_dbfs,
+                 "; ".join(diagnostic.suggestions))
     if quality != "ok":
         LOG.info("audio rejected reason=%s", quality)
         return ""
