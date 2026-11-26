@@ -23,7 +23,7 @@ adapter = nn.Linear(dim, dim)
 nn.init.zeros_(adapter.weight)
 nn.init.zeros_(adapter.bias)
 kd = Distillation(dim, [teacher.config.hidden_size, dim])
-opt = torch.optim.AdamW(list(adapter.parameters()) + list(kd.parameters()), lr=0.0003)
+opt = torch.optim.AdamW(list(adapter.parameters()) + list(kd.parameters()), lr=0.0001)
 
 def collect(split, count, with_teacher):
     ds = load_dataset("google/fleurs", "it_it", split=split, streaming=True, trust_remote_code=True).cast_column("audio", Audio(sampling_rate=16000))
@@ -41,8 +41,8 @@ def collect(split, count, with_teacher):
     assert len(rows)==count
     return rows
 
-def adapted(s,n):
-    return torch.cat([s[:,:n]+adapter(s[:,:n]),s[:,n:]],dim=1)
+def adapted(s,n,scale=1.0):
+    return torch.cat([s[:,:n]+scale*adapter(s[:,:n]),s[:,n:]],dim=1)
 
 def normalize(s):
     return re.findall(r"[^\W_]+",s.lower(),flags=re.UNICODE)
@@ -61,30 +61,48 @@ def decode(s):
     ids=student.generate(encoder_outputs=BaseModelOutput(last_hidden_state=s), language="it", task="transcribe", do_sample=False, num_beams=1, max_new_tokens=128)
     return processor.batch_decode(ids,skip_special_tokens=True)[0]
 
-train=collect("train",12,True)
+train=collect("train",48,True)
+dev=collect("validation",24,False)
 test=collect("test",24,False)
 train_refs={tuple(normalize(r[3])) for r in train}
-test=[r for r in test if tuple(normalize(r[3])) not in train_refs]
-assert len(test)>=16
-for epoch in range(5):
+dev=[r for r in dev if tuple(normalize(r[3])) not in train_refs]
+dev_refs={tuple(normalize(r[3])) for r in dev}
+test=[r for r in test if tuple(normalize(r[3])) not in train_refs|dev_refs]
+assert len(dev)>=16 and len(test)>=16
+# Preserve the decoder's Italian transcription task while transferring features.
+for epoch in range(3):
     for s,n,h,ref in train:
         opt.zero_grad()
         p=s[:,:n]
         z=p+adapter(p)
-        loss=kd(z,[h,p],torch.tensor([n]))+0.5*(z-p).square().mean()
+        enc=BaseModelOutput(last_hidden_state=adapted(s,n))
+        processor.tokenizer.set_prefix_tokens(language="italian",task="transcribe",predict_timestamps=False)
+        labels=processor.tokenizer(ref,return_tensors="pt").input_ids
+        if labels[0,0].item()==student.config.decoder_start_token_id:
+            labels=labels[:,1:]
+        ce=student(encoder_outputs=enc,labels=labels,use_cache=False).loss
+        loss=ce+0.1*kd(z,[h,p],torch.tensor([n]))+2.0*(z-p).square().mean()
         assert torch.isfinite(loss)
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(list(adapter.parameters())+list(kd.parameters()),1.0)
         opt.step()
-rows=[]
-for s,n,_,ref in test:
-    a=decode(s)
-    b=decode(adapted(s,n).detach())
-    r=normalize(ref)
-    rows.append(dict(reference=ref,baseline=a,adapted=b,words=len(r),before=distance(r,normalize(a)),after=distance(r,normalize(b))))
-words=sum(r["words"] for r in rows)
-before=sum(r["before"] for r in rows)
-after=sum(r["after"] for r in rows)
-report=dict(samples=len(rows),words=words,baseline_errors=before,adapted_errors=after,baseline_wer=before/words,adapted_wer=after/words,improved=sum(r["after"]<r["before"] for r in rows),worse=sum(r["after"]>r["before"] for r in rows),rows=rows)
-print(json.dumps({k:v for k,v in report.items() if k!="rows"}))
+def evaluate(data,scale):
+    rows=[]
+    for s,n,_,ref in data:
+        a=decode(s if scale==0 else adapted(s,n).detach() if scale==1 else adapted(s,n,scale).detach())
+        r=normalize(ref)
+        rows.append(dict(reference=ref,hypothesis=a,words=len(r),errors=distance(r,normalize(a))))
+    return rows
+scales=[0.0,0.1,0.25,0.5,1.0]
+dev_scores={scale:sum(r["errors"] for r in evaluate(dev,scale)) for scale in scales}
+chosen=min(scales,key=lambda scale:(dev_scores[scale],scale))
+baseline=evaluate(test,0)
+candidate=evaluate(test,chosen)
+full=evaluate(test,1)
+words=sum(r["words"] for r in baseline)
+before=sum(r["errors"] for r in baseline)
+after=sum(r["errors"] for r in candidate)
+report=dict(samples=len(test),words=words,dev_errors=dev_scores,chosen_scale=chosen,baseline_errors=before,adapted_errors=after,baseline_wer=before/words,adapted_wer=after/words,full_scale_errors=sum(r["errors"] for r in full),improved=sum(b["errors"]<a["errors"] for a,b in zip(baseline,candidate)),worse=sum(b["errors"]>a["errors"] for a,b in zip(baseline,candidate)),baseline=baseline,candidate=candidate)
+print(json.dumps({k:v for k,v in report.items() if k not in ("baseline","candidate")}))
 with open("wer-report.json","w") as f: json.dump(report,f,ensure_ascii=False,indent=2)
-torch.save(adapter.state_dict(),"adapter.pt")
+torch.save({"adapter":adapter.state_dict(),"scale":chosen},"adapter.pt")
