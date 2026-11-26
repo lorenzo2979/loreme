@@ -1,0 +1,40 @@
+name: ALBATROS ASR root cause diagnostic
+on:
+  push:
+    branches: [albatros-ai-v1-3]
+    paths:
+      - '.github/workflows/albatros-asr-diagnostic.yml'
+      - 'albatros-multi-stt-v2/asr_diagnostic.py'
+  workflow_dispatch:
+jobs:
+  compare:
+    strategy:
+      fail-fast: false
+      matrix:
+        model: [base, small, medium, large-v3, turbo, wav2vec2]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: albatros-multi-stt-v2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          pip install numpy==2.2.6 scipy faster-whisper==1.1.1 requests pyarrow sherpa-onnx
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - if: matrix.model == 'wav2vec2'
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install 'transformers>=4.48,<5'
+      - run: python -u asr_diagnostic.py
+        env:
+          ASR_MODEL: ${{ matrix.model }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diagnostic-${{ matrix.model }}
+          path: albatros-multi-stt-v2/asr-diagnostic.json
