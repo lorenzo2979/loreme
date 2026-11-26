@@ -125,7 +125,7 @@ def evaluate(model,items,book=None,train=False):
     records=[]; rows=[]; counts=collections.Counter()
     for label,case,audio,reference in items:
         start=time.perf_counter()
-        decision=select(audio,lambda a:recognize(model,a),book=book if not train else None,budget=3)
+        decision=select(audio,lambda a:recognize(model,a),book=book if not train else None,budget=8 if train else 3,explore=train)
         elapsed=round((time.perf_counter()-start)*1000,1)
         original=decision.options[0].hearing.text
         chosen=next(o for o in decision.options if o.key==decision.selected).hearing.text
