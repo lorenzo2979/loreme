@@ -1,0 +1,22 @@
+name: ALBATROS Neural Fusion IT
+on:
+  push:
+    branches: [albatros-neural-fusion-it]
+    paths: ['albatros-neural-fusion/**', '.github/workflows/albatros-neural-fusion.yml']
+  workflow_dispatch:
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install huggingface_hub
+      - run: python albatros-neural-fusion/preflight.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fusion-preflight
+          path: preflight.json
