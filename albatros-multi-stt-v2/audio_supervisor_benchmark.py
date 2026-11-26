@@ -40,7 +40,7 @@ def decode_bytes(data):
                        input=data,stdout=subprocess.PIPE,stderr=subprocess.PIPE,check=True,timeout=30).stdout
     return np.frombuffer(raw,dtype="<i2").astype(np.float32)/32768
 
-def independent_corpus(folder,count):
+def viewer_corpus(folder,count):
     # Request only a bounded subset of the Italian held-out test split.
     # The dataset viewer provides signed audio links, avoiding huge parquet.
     clips=[]; seen=set(); session=requests.Session()
@@ -64,6 +64,42 @@ def independent_corpus(folder,count):
             seen.add(ref); clips.append((pcm(x),ref))
             if len(clips)==count: return clips
     raise ValueError(f"Only {len(clips)} eligible independent clips")
+
+
+def independent_corpus(folder,count):
+    # Keep the same held-out split even if the viewer service fails.
+    try:
+        return viewer_corpus(folder,count)
+    except (requests.RequestException, ValueError, subprocess.SubprocessError) as exc:
+        print("FLEURS viewer unavailable:", type(exc).__name__, flush=True)
+    import pyarrow.parquet as pq
+    base="https://huggingface.co/api/datasets/google/fleurs/parquet/it_it/test"
+    response=requests.get(base,timeout=(15,120))
+    response.raise_for_status()
+    urls=response.json()
+    if not isinstance(urls,list) or not urls:
+        raise ValueError("No Italian FLEURS test parquet shards")
+    clips=[]; seen=set()
+    for index,url in enumerate(urls):
+        if not isinstance(url,str) or not url.startswith("https://"):
+            raise ValueError("Invalid parquet shard URL")
+        path=folder/f"fleurs-test-{index}.parquet"
+        download(url,path,2_500_000_000)
+        parquet=pq.ParquetFile(path)
+        for batch in parquet.iter_batches(batch_size=8,columns=["audio","transcription"]):
+            for row in batch.to_pylist():
+                ref=row["transcription"].strip()
+                if not ref or ref in seen: continue
+                audio=row["audio"]
+                if not audio or not audio.get("bytes"): continue
+                x=decode_bytes(audio["bytes"])
+                if not 1<=len(x)/16000<=25: continue
+                seen.add(ref); clips.append((pcm(x),ref))
+                if len(clips)==count:
+                    print("FLEURS held-out source: parquet",flush=True)
+                    return clips
+        path.unlink()
+    raise ValueError(f"Only {len(clips)} eligible independent parquet clips")
 
 
 def real_noises(folder):
