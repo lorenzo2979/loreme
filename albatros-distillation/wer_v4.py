@@ -103,7 +103,7 @@ def edits(a,b):
         for j,y in enumerate(b,1):
             c=d[i-1][j-1]; u=d[i-1][j]; l=d[i][j-1]; k=int(x!=y)
             d[i][j]=min((c[0]+k,c[1]+k,c[2],c[3]),(u[0]+1,u[1],u[2]+1,u[3]),(l[0]+1,l[1],l[2],l[3]+1))
-    return d[-1][-3:]
+    return d[-1][-1][1:]
 
 def evaluate(data,scale):
     rows=[]
