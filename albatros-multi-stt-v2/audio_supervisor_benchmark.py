@@ -122,6 +122,14 @@ def mix_real(audio,noise,seed,snr):
     y=x+n; return pcm(y*min(1.,.98/max(float(np.max(abs(y))),1e-9)))
 
 def evaluate(model,items,book=None,train=False):
+    quality_model=None
+    if os.environ.get("ALBATROS_DNSMOS_TEST")=="1":
+        from torchmetrics.functional.audio.dnsmos import deep_noise_suppression_mean_opinion_score
+        import torch
+        def quality_model(audio):
+            values=deep_noise_suppression_mean_opinion_score(torch.tensor(samples(audio)),16000,False)
+            return [float(v) for v in values.tolist()]
+
     records=[]; rows=[]; counts=collections.Counter()
     for label,case,audio,reference in items:
         start=time.perf_counter()
@@ -140,6 +148,16 @@ def evaluate(model,items,book=None,train=False):
              "reason":decision.reason,"errors":decision.errors,"original_wer":qa["wer"],"selected_wer":qb["wer"],
              "original_critical":qa["critical_differences"],"selected_critical":qb["critical_differences"],
              "elapsed_ms":elapsed,"candidates":len(decision.options),"oracle_wer":qo["wer"],"oracle_key":oracle.key}
+        if quality_model is not None:
+            quality=[]
+            for option in decision.options:
+                try:
+                    scores=quality_model(option.audio)
+                    quality.append({"key":option.key,"dnsmos":scores,
+                                    "word_errors":analyze(reference,option.hearing.text)["word_errors"]})
+                except Exception as exc:
+                    quality.append({"key":option.key,"error":str(exc)})
+            row["quality_diagnostic"]=quality
         rows.append(row); print(json.dumps(row),flush=True)
         if train: book.observe(decision,reference,verified=True)
     return {"overall":score_dataset(records),"per_case":{c:score_dataset([r for r in records if r["category"]==c]) for c in sorted(set(r["category"] for r in records))},"paired":dict(counts),"rows":rows}
