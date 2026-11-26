@@ -18,7 +18,7 @@ from italian_quality import tokens, critical_differences, analyze, edit_distance
 POLICY={
  "quiet":(("agc",1.),("webrtc",.25),("deepfilternet",.5),("albatros_v1",.5)),
  "tonal":(("ffmpeg",.5),("rnnoise",.5),("webrtc",.25),("dpdfnet",1.)),
- "broadband":(("dpdfnet",1.),("webrtc",.5),("deepfilternet",1.),("gtcrn",.75)),
+ "broadband":(("dpdfnet",1.),("webrtc",.25),("deepfilternet",1.),("gtcrn",.75)),
  "uncertain":(("webrtc",.25),("albatros_v1",.5),("dpdfnet",1.),("gtcrn",.75)),
 }
 EXPLORATION=(("agc",1.),("ffmpeg",.5),("rnnoise",.5),("gtcrn",.75),("deepfilternet",1.),("dpdfnet",1.),("webrtc",.5),("albatros_v1",.5))
@@ -221,6 +221,7 @@ def select(audio,recognizer,*,book=None,budget=3,explore=False,filter_fn=apply_f
         distinct=len({o.audio.pcm for o in group})
         margin=best.hearing.score-original.hearing.score
         if distinct>=2:
+            if original_tokens and edit_distance(original_tokens,words)["errors"]>max(1,len(original_tokens)//5): continue
             if original.hearing.usable and (margin<.08 or
                     sum(o.hearing.score for o in group)/len(group)<original.hearing.score+.02): continue
             choices.append((best,"corroborated_alternative")); continue
@@ -230,11 +231,12 @@ def select(audio,recognizer,*,book=None,budget=3,explore=False,filter_fn=apply_f
         supported=bool(book and book.supported(p.label,best.key))
         # Strong acoustic/recognizer evidence; lower margin only for a
         # profile/variant supported by separately verified training outcomes.
-        threshold=.15 if supported else .35
+        threshold=.10 if supported else .35
         if (p.label not in ("broadband","tonal") and not supported) or margin<threshold or best.hearing.score<-.8: continue
         # Any contradictory critical tokens in other usable hypotheses block
         # a single-filter switch.
         if any(critical_differences(best.hearing.text,o.hearing.text) for o in valid): continue
         choices.append((best,"verified_policy_alternative" if supported else "strong_single_alternative"))
     if len(choices)==1: return finish(*choices[0])
+    # Preserve the original when competing alternatives disagree.
     return finish(original,"ambiguous_alternatives" if choices else "original_conservative")
