@@ -37,6 +37,7 @@ class Hearing:
     text: str
     score: float
     usable: bool
+    word_evidence: tuple = ()
 
 @dataclass(frozen=True)
 class Option:
@@ -163,7 +164,7 @@ def recognize(model,audio):
     """Whisper evidence. Confidence is heuristic, not a probability of correctness."""
     x=samples(audio)
     segments,_=model.transcribe(x,language="it",beam_size=5,condition_on_previous_text=False,
-                                vad_filter=False,temperature=0)
+                                vad_filter=False,temperature=0,word_timestamps=True)
     seg=list(segments)
     transcript=" ".join(s.text.strip() for s in seg).strip()
     words=tokens(transcript)
@@ -173,7 +174,8 @@ def recognize(model,audio):
     max_rate=len(words)/max(len(x)/16000,.25)
     repeated=max(Counter(words).values())/len(words) if len(words)>=8 else 0.
     suspicious=any(s.compression_ratio>2.4 or (s.no_speech_prob>.6 and s.avg_logprob<-.8) for s in seg)
-    return Hearing(transcript,float(score),bool(math.isfinite(score) and score>=-1.4 and max_rate<=8 and repeated<.6 and not suspicious))
+    evidence=tuple((t,float(w.probability)) for segm in seg for w in (getattr(segm,"words",None) or []) for t in tokens(w.word))
+    return Hearing(transcript,float(score),bool(math.isfinite(score) and score>=-1.4 and max_rate<=8 and repeated<.6 and not suspicious),evidence)
 
 def select(audio,recognizer,*,book=None,budget=3,explore=False,filter_fn=apply_filter,vad_fn=speech_segments):
     p=profile(audio); diag=diagnose(audio); errors={}
@@ -232,6 +234,16 @@ def select(audio,recognizer,*,book=None,budget=3,explore=False,filter_fn=apply_f
         # Strong acoustic/recognizer evidence; lower margin only for a
         # profile/variant supported by separately verified training outcomes.
         threshold=.10 if supported else .35
+        # Local evidence for a single substitution, rather than relying solely
+        # on sentence-wide confidence. Never use reference text here.
+        a=original.hearing.word_evidence; z=best.hearing.word_evidence
+        if len(words)==len(original_tokens) and tuple(t for t,_ in a)==original_tokens and tuple(t for t,_ in z)==words:
+            changed=[i for i,(u,v) in enumerate(zip(original_tokens,words)) if u!=v]
+            if len(changed)==1:
+                i=changed[0]
+                if a[i][1]<=.45 and z[i][1]>=.85 and margin>=0 and best.hearing.score>=-.8:
+                    if not any(critical_differences(best.hearing.text,o.hearing.text) for o in valid):
+                        choices.append((best,"local_word_evidence")); continue
         if (p.label not in ("broadband","tonal") and not supported) or margin<threshold or best.hearing.score<-.8: continue
         # Any contradictory critical tokens in other usable hypotheses block
         # a single-filter switch.
