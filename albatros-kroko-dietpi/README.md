@@ -17,6 +17,10 @@ bash prova.sh
 
 La prova usa un namespace di rete temporaneo che contiene soltanto il loopback. Avvia Kroko, invia la clip e arresta il processo all'uscita. Da utente non root usa un namespace utente. Se il kernel risponde `Operation not permitted`, la prova richiede una shell di amministrazione sul sistema host. `runtime/server.log` contiene l'output del server. Per ripetere una prova già preparata basta `bash prova.sh`, anche in assenza di Internet.
 
+Su DietPi già preparato, estrarre con `unzip -o ALBATROS_Kroko_DietPi.zip` dalla cartella che contiene lo ZIP e la sottocartella `ALBATROS_Kroko_DietPi`. L'archivio aggiorna i file del prototipo. Il modello e le dipendenze già scaricati nella sottocartella `runtime` restano utilizzabili.
+
+Il collaudo usa due thread di inferenza, un worker del server e warm-up disattivato. Se Kroko invia `Done!` senza un `final` per l'ultimo segmento, il client conserva l'ultimo parziale e lo indica esplicitamente. In quel caso il ritardo include l'attesa di `Done!`.
+
 Il riferimento inizia con «La religione predominante in Moldavia». Il modello usato durante il collaudo ha trascritto «cristiana-ortodossa» al posto di «cristiano-ortodossa». Il checkpoint di questo script è l'esecuzione riuscita con testo e misure sul processore fisico. La misura di latenza è riferita all'ultimo campione, che può contenere silenzio.
 
 Kroko Community gira in locale attraverso il server WebSocket. L'integrazione successiva con Assist richiederà un adattatore fra questo protocollo e Wyoming e una pipeline di prova in Home Assistant.
